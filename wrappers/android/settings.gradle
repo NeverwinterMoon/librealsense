@@ -1,3 +1,13 @@
+pluginManagement {
+  repositories {
+    gradlePluginPortal()
+    google()
+    maven {
+      url 'https://jitpack.io'
+    }
+  }
+}
+
 //library
 include ':librealsense'
 project(':librealsense').projectDir = new File('librealsense')
