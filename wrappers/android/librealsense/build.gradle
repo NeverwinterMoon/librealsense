@@ -1,6 +1,24 @@
 apply plugin: 'com.android.library'
+apply plugin: 'maven-publish'
+
+publishing {
+  publications {
+    release(MavenPublication) {
+      groupId 'com.intel'
+      artifactId 'realsense'
+      version '2.54.2'
+
+      artifact("$buildDir/outputs/aar/librealsense-release.aar")
+
+//      afterEvaluate {
+//        from components.release
+//      }
+    }
+  }
+}
 
 android {
+  namespace 'com.intel.realsense.librealsense'
   ndkVersion '23.1.7779620'
   compileSdkVersion 31
 
