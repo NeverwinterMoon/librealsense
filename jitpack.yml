@@ -1,4 +1,8 @@
+jdk:
+  - openjdk19
 before_install:
+  - sdk install java 19.0.2-open
+  - sdk use java 19.0.2-open
   - cd ./wrappers/android/
 #install:
 #  - echo "Running a custom install command"
