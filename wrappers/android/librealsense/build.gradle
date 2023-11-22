@@ -2,20 +2,38 @@ apply plugin: 'com.android.library'
 apply plugin: 'maven-publish'
 
 publishing {
+  repositories {
+    maven {
+      name = 'GithubPackages'
+      url = uri('https://maven.pkg.github.com/NeverwinterMoon/librealsense')
+      credentials {
+        username = GITHUB_USERNAME
+        password = GITHUB_TOKEN
+      }
+    }
+  }
+
   publications {
-    release(MavenPublication) {
-      groupId 'com.intel'
-      artifactId 'realsense'
+    gpr(MavenPublication) {
+      groupId 'com.intel.realsense'
+      artifactId 'librealsense'
       version '2.54.2'
 
       artifact("$buildDir/outputs/aar/librealsense-release.aar")
-
-//      afterEvaluate {
-//        from components.release
-//      }
     }
   }
 }
+
+// JitPack experiment
+// Sadly, JitPack runs out of memory (or something similar) when building this on their servers
+//    release(MavenPublication) {
+//      groupId 'com.intel'
+//      artifactId 'realsense'
+//      version '2.54.2'
+//
+//      artifact("$buildDir/outputs/aar/librealsense-release.aar")
+//
+//    }
 
 android {
   namespace 'com.intel.realsense.librealsense'
