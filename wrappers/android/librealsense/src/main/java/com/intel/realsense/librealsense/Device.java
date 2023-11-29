@@ -68,6 +68,10 @@ public class Device extends LrsClass {
             nRelease(mHandle);
     }
 
+    public void writeCustomCalibrationTable(byte[] calibrationData) {
+        nWriteCustomCalibrationTable(mHandle, calibrationData);
+    }
+
     private static native boolean nSupportsInfo(long handle, int info);
     private static native String nGetInfo(long handle, int info);
     private static native void nToggleAdvancedMode(long handle, boolean enable);
@@ -78,4 +82,5 @@ public class Device extends LrsClass {
     private static native void nHardwareReset(long handle);
     private static native boolean nIsDeviceExtendableTo(long handle, int extension);
     private static native void nRelease(long handle);
+    private static native void nWriteCustomCalibrationTable(long handle, byte[] calibrationData);
 }
