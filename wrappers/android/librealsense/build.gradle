@@ -38,11 +38,13 @@ publishing {
 android {
   namespace 'com.intel.realsense.librealsense'
   ndkVersion '23.1.7779620'
-  compileSdkVersion 31
+
+  compileSdk rootProject.ext.compileSdkVersion
 
   defaultConfig {
-    minSdkVersion 19
-    targetSdkVersion 31
+    minSdkVersion rootProject.ext.minSdkVersion
+    targetSdkVersion rootProject.ext.targetSdkVersion
+
     versionCode 1
     versionName "2.0.0"
 

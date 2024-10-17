@@ -7,8 +7,6 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.os.Bundle;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import androidx.appcompat.app.AppCompatActivity;
 import android.util.Log;
 import android.util.Pair;
 import android.view.View;
@@ -18,14 +16,12 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.intel.realsense.librealsense.Config;
-import com.intel.realsense.librealsense.Device;
-import com.intel.realsense.librealsense.DeviceList;
 import com.intel.realsense.librealsense.FrameSet;
 import com.intel.realsense.librealsense.GLRsSurfaceView;
-import com.intel.realsense.librealsense.Option;
-import com.intel.realsense.librealsense.RsContext;
-import com.intel.realsense.librealsense.Sensor;
 
 import java.util.HashMap;
 import java.util.Map;

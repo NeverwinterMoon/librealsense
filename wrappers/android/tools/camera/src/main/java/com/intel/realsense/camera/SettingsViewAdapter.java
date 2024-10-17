@@ -1,12 +1,14 @@
 package com.intel.realsense.camera;
-import java.util.HashMap;
-import java.util.List;
+
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseExpandableListAdapter;
 import android.widget.TextView;
+
+import java.util.HashMap;
+import java.util.List;
 
 // The 'SettingsViewAdapter'' class is in charge of the UI and behaviour of the ExpandableList inside the settings page.
 public class SettingsViewAdapter extends BaseExpandableListAdapter {
@@ -81,7 +83,7 @@ public class SettingsViewAdapter extends BaseExpandableListAdapter {
         }
         TextView listTitleTextView = (TextView) convertView
                 .findViewById(R.id.listTitle);
-        
+
         if (isExpanded) {
             listTitleTextView.setText("v " + listTitle);
         }

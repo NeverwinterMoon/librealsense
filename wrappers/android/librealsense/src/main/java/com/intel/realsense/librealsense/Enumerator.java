@@ -29,6 +29,7 @@ class Enumerator {
             String action = intent.getAction();
             Log.i(TAG, "onReceive: " + action);
 
+          if (action != null) {
             switch(action){
                 case UsbManager.ACTION_USB_DEVICE_ATTACHED:
                 case UsbUtilities.ACTION_USB_PERMISSION:
@@ -38,6 +39,7 @@ class Enumerator {
                     onDeviceDetach();
                     break;
             }
+          }
         }
     };
 

@@ -2,14 +2,13 @@ package com.intel.realsense.camera;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Environment;
-import androidx.appcompat.app.AppCompatActivity;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import androidx.appcompat.app.AppCompatActivity;
 import java.io.File;
 
 public class FileBrowserActivity extends AppCompatActivity {

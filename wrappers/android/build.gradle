@@ -1,14 +1,10 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-  ext {
-    android_gradle_plugin = '7.4.2'
-  }
-
-  repositories {
-    google()
-    jcenter()
-  }
+    repositories {
+        google()
+        jcenter()
+    }
 //  dependencies {
 //        classpath 'com.android.tools.build:gradle:4.1.2'
 
@@ -19,16 +15,22 @@ buildscript {
 }
 
 plugins {
-  id 'com.android.application' version "$android_gradle_plugin" apply false
+    id 'com.android.application' version "8.4.2" apply false
 }
 
 allprojects {
-  repositories {
-    google()
-    jcenter()
-  }
+    ext {
+        minSdkVersion = 23
+        targetSdkVersion = 33
+        compileSdkVersion = 34
+    }
+
+    repositories {
+        google()
+        jcenter()
+    }
 }
 
 task clean(type: Delete) {
-  delete rootProject.buildDir
+    delete rootProject.buildDir
 }
