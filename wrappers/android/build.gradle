@@ -21,7 +21,7 @@ plugins {
 allprojects {
     ext {
         minSdkVersion = 23
-        targetSdkVersion = 33
+        targetSdkVersion = 34
         compileSdkVersion = 34
     }
 
