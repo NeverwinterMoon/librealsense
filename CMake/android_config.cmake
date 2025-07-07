@@ -9,15 +9,19 @@ macro(os_set_flags)
     set(BUILD_LEGACY_LIVE_TEST OFF)
     set(BUILD_EXAMPLES OFF)
     set(BUILD_TOOLS OFF)
-    set(BUILD_WITH_OPENMP OFF)    
+    set(BUILD_WITH_OPENMP OFF)
     set(BUILD_GRAPHICAL_EXAMPLES OFF)
     set(ANDROID_STL "c++_static")
     set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -fPIC -pedantic -g -D_DEFAULT_SOURCE")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -pedantic -g -Wno-missing-field-initializers")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-switch -Wno-multichar")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fPIE -pie")
+
+    # Add 16KB page size support for Android
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+
     set(HWM_OVER_XU ON)
-	
+
     if(FORCE_RSUSB_BACKEND)
         set(BACKEND RS2_USE_ANDROID_BACKEND)
         set(IMPORT_DEPTH_CAM_FW OFF)
