@@ -15,14 +15,16 @@ buildscript {
 }
 
 plugins {
-    id 'com.android.application' version "8.4.2" apply false
+    id 'com.android.application' version "8.12.1" apply false
+    id 'com.android.library' version "8.12.1" apply false
+    id 'org.jetbrains.kotlin.android' version "2.2.10" apply false
 }
 
 allprojects {
     ext {
         minSdkVersion = 23
-        targetSdkVersion = 34
-        compileSdkVersion = 34
+        targetSdkVersion = 35
+        compileSdkVersion = 35
     }
 
     repositories {

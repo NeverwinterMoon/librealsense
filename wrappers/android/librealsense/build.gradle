@@ -1,5 +1,6 @@
 apply plugin: 'com.android.library'
 apply plugin: 'maven-publish'
+apply plugin: 'org.jetbrains.kotlin.android'
 
 publishing {
   repositories {
@@ -37,9 +38,9 @@ publishing {
 
 android {
   namespace 'com.intel.realsense.librealsense'
-  ndkVersion '23.1.7779620'
+  ndkVersion '28.2.13676358'
 
-  compileSdk rootProject.ext.compileSdkVersion
+  compileSdk = rootProject.ext.compileSdkVersion
 
   defaultConfig {
     minSdkVersion rootProject.ext.minSdkVersion
@@ -55,6 +56,10 @@ android {
         arguments "-DFORCE_RSUSB_BACKEND=TRUE"
       }
     }
+  }
+
+  kotlin {
+    jvmToolchain 17
   }
 
   buildTypes {
@@ -76,8 +81,10 @@ android {
 dependencies {
   implementation fileTree(dir: 'libs', include: ['*.jar'])
 
-  implementation 'androidx.appcompat:appcompat:1.2.0'
-  testImplementation 'junit:junit:4.12'
-  androidTestImplementation 'androidx.test.ext:junit:1.1.2'
-  androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
+  implementation 'androidx.appcompat:appcompat:1.7.1'
+
+  testImplementation 'junit:junit:4.13.2'
+
+  androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+  androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
 }
