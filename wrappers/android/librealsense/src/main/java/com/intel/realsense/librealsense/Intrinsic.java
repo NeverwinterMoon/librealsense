@@ -48,6 +48,22 @@ public class Intrinsic {
     return mModel;
   }
 
+  public float getFocalLengthX() {
+    return mFx;
+  }
+
+  public float getFocalLengthY() {
+    return mFy;
+  }
+
+  public float getOpticalCenterX() {
+    return mPpx;
+  }
+
+  public float getOpticalCenterY() {
+    return mPpy;
+  }
+
   public void SetModel() {
     this.mModel = DistortionType.values()[mModelValue];
   }
