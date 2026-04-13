@@ -2,25 +2,27 @@ apply plugin: 'com.android.library'
 apply plugin: 'maven-publish'
 apply plugin: 'org.jetbrains.kotlin.android'
 
-publishing {
-  repositories {
-    maven {
-      name = 'GithubPackages'
-      url = uri('https://maven.pkg.github.com/NeverwinterMoon/librealsense')
-      credentials {
-        username = GITHUB_USERNAME
-        password = GITHUB_TOKEN
+afterEvaluate {
+  publishing {
+    repositories {
+      maven {
+        name = 'GithubPackages'
+        url = uri('https://maven.pkg.github.com/NeverwinterMoon/librealsense')
+        credentials {
+          username = GITHUB_USERNAME
+          password = GITHUB_TOKEN
+        }
       }
     }
-  }
 
-  publications {
-    gpr(MavenPublication) {
-      groupId 'com.intel.realsense'
-      artifactId 'librealsense-android'
-      version '2.3.0'
+    publications {
+      gpr(MavenPublication) {
+        groupId 'com.intel.realsense'
+        artifactId 'librealsense-android'
+        version '2.4.0'
 
-      artifact("$buildDir/outputs/aar/librealsense-release.aar")
+        from components.release
+      }
     }
   }
 }
@@ -47,7 +49,7 @@ android {
     targetSdkVersion rootProject.ext.targetSdkVersion
 
     versionCode 1
-    versionName "2.3.0"
+    versionName "2.4.0"
 
     testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
 
@@ -71,9 +73,16 @@ android {
       debuggable true
     }
   }
+
   externalNativeBuild {
     cmake {
       path "CMakeLists.txt"
+    }
+  }
+
+  publishing {
+    singleVariant("release") {
+      withSourcesJar()
     }
   }
 }
