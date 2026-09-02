@@ -49,3 +49,23 @@ Java_com_intel_realsense_librealsense_Device_nSerializePresetToJson(JNIEnv *env,
                             reinterpret_cast<const jbyte *>(raw_data_buffer->buffer.data()));
     return rv;
 }
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_intel_realsense_librealsense_Device_nSetAmpFactor(JNIEnv *env, jclass type,
+                                                           jlong handle, jfloat amplitude) {
+    rs2_error* e = NULL;
+    STAFactor factor;
+    factor.amplitude = amplitude;
+    rs2_set_amp_factor(reinterpret_cast<rs2_device *>(handle), &factor, &e);
+    handle_error(env, e);
+}
+
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_intel_realsense_librealsense_Device_nGetAmpFactor(JNIEnv *env, jclass type,
+                                                           jlong handle) {
+    rs2_error* e = NULL;
+    STAFactor factor;
+    rs2_get_amp_factor(reinterpret_cast<rs2_device *>(handle), &factor, 0, &e);
+    handle_error(env, e);
+    return factor.amplitude;
+}

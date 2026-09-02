@@ -72,6 +72,14 @@ public class Device extends LrsClass {
         nWriteCustomCalibrationTable(mHandle, calibrationData);
     }
 
+    public void setAmpFactor(float amplitude) {
+        nSetAmpFactor(mHandle, amplitude);
+    }
+
+    public float getAmpFactor() {
+        return nGetAmpFactor(mHandle);
+    }
+
     private static native boolean nSupportsInfo(long handle, int info);
     private static native String nGetInfo(long handle, int info);
     private static native void nToggleAdvancedMode(long handle, boolean enable);
@@ -83,4 +91,7 @@ public class Device extends LrsClass {
     private static native boolean nIsDeviceExtendableTo(long handle, int extension);
     private static native void nRelease(long handle);
     private static native void nWriteCustomCalibrationTable(long handle, byte[] calibrationData);
+
+    private static native void nSetAmpFactor(long handle, float amplitude);
+    private static native float nGetAmpFactor(long handle);
 }
