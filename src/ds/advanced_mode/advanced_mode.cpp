@@ -53,7 +53,7 @@ namespace librealsense
             }
             return (d400_color_sensor*)nullptr;
         };
-        
+
         _amplitude_factor_support = [this]() {
             auto fw_ver = firmware_version(_depth_sensor.get_device().get_info(rs2_camera_info::RS2_CAMERA_INFO_FIRMWARE_VERSION));
             return (fw_ver >= firmware_version("5.11.9.0"));
@@ -118,7 +118,7 @@ namespace librealsense
                 {
                 case low_resolution:
                 case medium_resolution:
-                    //applied defaultly 
+                    //applied defaultly
                     break;
                 case high_resolution:
                     default_450_high_res(p);
@@ -128,6 +128,7 @@ namespace librealsense
                         std::hex << device_pid << ")");
                     break;
                 }
+                break;
             case ds::RS405U_PID:
                 default_405u(p);
                 break;
