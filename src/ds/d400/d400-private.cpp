@@ -1,11 +1,10 @@
 //// License: Apache 2.0. See LICENSE file in root directory.
-//// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+//// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #include "d400-private.h"
 
 using namespace std;
 
-#define intrinsics_string(res) #res << "\t" << array2str((float_4&)table->rect_params[res]) << endl
 
 namespace librealsense
 {
@@ -30,6 +29,7 @@ namespace librealsense
                     case RS460_PID:
                     case RS430_PID:
                     case RS420_PID:
+                    case RS421_PID:
                     case RS400_IMU_PID:
                         found = (result.mi == 3);
                         break;
@@ -40,13 +40,13 @@ namespace librealsense
                     case RS430_MM_PID:
                     case RS420_MM_PID:
                     case RS435I_PID:
+                    case RS436_PID:
                     case RS455_PID:
                         found = (result.mi == 6);
                         break;
                     case RS415_PID:
                     case RS416_RGB_PID:
                     case RS435_RGB_PID:
-                    case RS465_PID:
                         found = (result.mi == 5);
                         break;
                     default:
@@ -87,6 +87,23 @@ namespace librealsense
             return results;
         }
 
+        std::string extract_firmware_version_string( const std::vector< uint8_t > & fw_image )
+        {
+            auto version_offset = offsetof( platform::dfu_header, bcdDevice );
+            if( fw_image.size() < ( version_offset + sizeof( size_t ) ) )
+                throw std::runtime_error( "Firmware binary image might be corrupted - size is only: "
+                                          + std::to_string( fw_image.size() ) );
+
+            auto version = fw_image.data() + version_offset;
+            uint8_t major = *( version + 3 );
+            uint8_t minor = *( version + 2 );
+            uint8_t patch = *( version + 1 );
+            uint8_t build = *( version );
+
+            return std::to_string( major ) + "." + std::to_string( minor ) + "." + std::to_string( patch ) + "."
+                 + std::to_string( build );
+        }
+
         rs2_intrinsics get_d400_intrinsic_by_resolution(const vector<uint8_t>& raw_data, d400_calibration_table_id table_id, uint32_t width, uint32_t height)
         {
             switch (table_id)
@@ -112,6 +129,8 @@ namespace librealsense
         {
             auto table = check_calib<ds::d400_coefficients_table>(raw_data);
 
+#define intrinsics_string(res) #res << "\t" << array2str((float_4&)table->rect_params[res]) << endl
+
             LOG_DEBUG(endl
                 << "baseline = " << table->baseline << " mm" << endl
                 << "Rect params:  \t fX\t\t fY\t\t ppX\t\t ppY \n"
@@ -125,6 +144,8 @@ namespace librealsense
                 << intrinsics_string(res_480_270)
                 << intrinsics_string(res_1280_800)
                 << intrinsics_string(res_960_540));
+
+#undef intrinsics_string
 
             auto resolution = width_height_to_ds_rect_resolutions(width, height);
 
@@ -256,8 +277,8 @@ namespace librealsense
                 intrin(1, 1) * height / 2.f,
                 RS2_DISTORTION_INVERSE_BROWN_CONRADY  // The coefficients shall be use for undistort
             };
-            librealsense::copy(calc_intrinsic.coeffs, table->distortion, sizeof(table->distortion));
-            LOG_DEBUG(endl << array2str((float_4&)(calc_intrinsic.fx, calc_intrinsic.fy, calc_intrinsic.ppx, calc_intrinsic.ppy)) << endl);
+            std::memcpy(calc_intrinsic.coeffs, table->distortion, sizeof(table->distortion));
+            //LOG_DEBUG(endl << array2str((float_4&)(calc_intrinsic.fx, calc_intrinsic.fy, calc_intrinsic.ppx, calc_intrinsic.ppy)) << endl);
 
             static rs2_intrinsics ref{};
             if (memcmp(&calc_intrinsic, &ref, sizeof(rs2_intrinsics)))
@@ -269,6 +290,90 @@ namespace librealsense
             }
 
             return calc_intrinsic;
+        }
+
+        //D405 needs special calculation because the ISP crops the full sensor image using non linear transformation.
+        rs2_intrinsics get_d405_color_stream_intrinsic(const std::vector<uint8_t>& raw_data, uint32_t width, uint32_t height)
+        {
+            struct resolution
+            {
+                uint32_t width = 0;
+                uint32_t height = 0;
+            };
+
+            // Convert normalized focal length and principal point to pixel units (K matrix format)
+            auto normalized_k_to_pixels = [&]( float3x3 & k, resolution res )
+            {
+                if( res.width == 0 || res.height == 0 )
+                    throw invalid_value_exception( rsutils::string::from() <<
+                                                   "Unsupported resolution used (" << width << ", " << height << ")" );
+
+                k( 0, 0 ) = k( 0, 0 ) * res.width / 2.f;      // fx
+                k( 1, 1 ) = k( 1, 1 ) * res.height / 2.f;     // fy
+                k( 2, 0 ) = ( k( 2, 0 ) + 1 ) * res.width / 2.f;  // ppx
+                k( 2, 1 ) = ( k( 2, 1 ) + 1 ) * res.height / 2.f;  // ppy
+            };
+
+            // Scale focal length and principal point in pixel units from one resolution to another (K matrix format)
+            auto scale_pixel_k = [&]( float3x3 & k, resolution in_res, resolution out_res)
+            {
+                if( in_res.width == 0 || in_res.height == 0 || out_res.width == 0 || out_res.height == 0 )
+                    throw invalid_value_exception( rsutils::string::from() <<
+                                                   "Unsupported resolution used (" << width << ", " << height << ")" );
+
+                float scale_x = out_res.width / static_cast< float >( in_res.width );
+                float scale_y = out_res.height / static_cast< float >( in_res.height );
+                float scale = max( scale_x, scale_y );
+                float shift_x = ( in_res.width * scale - out_res.width ) / 2.f;
+                float shift_y = ( in_res.height * scale - out_res.height ) / 2.f;
+
+                k( 0, 0 ) = k( 0, 0 ) * scale;  // fx
+                k( 1, 1 ) = k( 1, 1 ) * scale;  // fy
+                k( 2, 0 ) = k( 2, 0 ) * scale - shift_x;  // ppx
+                k( 2, 1 ) = k( 2, 1 ) * scale - shift_y;  // ppy
+            };
+
+            auto table = check_calib< ds::d400_rgb_calibration_table >( raw_data );
+            auto output_res = resolution{ width, height };
+            auto calibration_res = resolution{ table->calib_width, table->calib_height };
+
+            float3x3 k = table->intrinsic;
+            if( width == 1280 && height == 720 )
+                normalized_k_to_pixels( k, output_res );
+            else if( width == 640 && height == 480 ) // 640x480 is 4:3 not 16:9 like other available resolutions, ISP handling is different.
+            {
+                auto raw_res = resolution{ 1280, 800 };
+                // Extrapolate K to raw resolution
+                float scale_y = calibration_res.height / static_cast< float >( raw_res.height );
+                k( 1, 1 ) = k( 1, 1 ) * scale_y;  // fy
+                k( 2, 1 ) = k( 2, 1 ) * scale_y;  // ppy
+                normalized_k_to_pixels( k, raw_res );
+                // Handle ISP scaling to 770x480
+                auto scale_res = resolution{ 770, 480 };
+                scale_pixel_k( k, raw_res, scale_res );
+                // Handle ISP cropping to 640x480
+                k( 2, 0 ) = k( 2, 0 ) - ( scale_res.width - output_res.width ) / 2;  // ppx
+                k( 2, 1 ) = k( 2, 1 ) - ( scale_res.height - output_res.height ) / 2;  // ppy
+            }
+            else
+            {
+                normalized_k_to_pixels( k, calibration_res );
+                scale_pixel_k( k, calibration_res, output_res );
+            }
+
+            // Convert k matrix format to rs2 format
+            rs2_intrinsics rs2_intr{
+                static_cast< int >( width ),
+                static_cast< int >( height ),
+                k( 2, 0 ),
+                k( 2, 1 ),
+                k( 0, 0 ),
+                k( 1, 1 ),
+                RS2_DISTORTION_INVERSE_BROWN_CONRADY  // The coefficients shall be use for undistort
+            };
+            std::memcpy( rs2_intr.coeffs, table->distortion, sizeof( table->distortion ) );
+
+            return rs2_intr;
         }
 
         // Parse intrinsics from newly added RECPARAMSGET command

@@ -1,5 +1,5 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-   Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+   Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 /** \file rs_context.h
 * \brief Exposes RealSense context functionality for C compilers
@@ -16,11 +16,37 @@ extern "C" {
 
 /**
 * \brief Creates RealSense context that is required for the rest of the API.
+* Context settings are taken from the library configuration file's 'context' key.
 * \param[in] api_version Users are expected to pass their version of \c RS2_API_VERSION to make sure they are running the correct librealsense version.
 * \param[out] error  If non-null, receives any error that occurs during this call, otherwise, errors are ignored.
 * \return            Context object
 */
 rs2_context* rs2_create_context(int api_version, rs2_error** error);
+
+/**
+* \brief Creates RealSense context that is required for the rest of the API, and accepts a settings JSON.
+* \param[in] api_version Users are expected to pass their version of \c RS2_API_VERSION to make sure they are running the correct librealsense version.
+* \param[in] json_settings Pointer to a string containing a JSON configuration to use, or null if none
+*     Possible <setting>:<default-value> :
+*         inherit: true                 - (bool) whether to inherit and override library configuration file values:
+*             the 'context' key in the file is taken as-is
+*             '<executable-name>/context' is merged, if it exists
+*             then the context-settings are merged
+*         dds: {}                       - DDS settings: (requires BUILD_WITH_DDS)
+*             enabled: false            - (bool) whether DDS is enabled
+*             domain: 0                 - (int) the number of the DDS domain [0-232]
+*             participant: <exe name>   - (string) the name of the participant
+*                 (see additional settings in realdds/doc/device.md#Settings)
+*         format-conversion: full       - (string) how to convert formats
+*             full: provide all conversions (e.g., YUYV -> RGB8 etc.)
+*             basic: use mostly raw camera formats (no RGB8 etc.); convert interleaved (Y8I -> 2xY8)
+*             raw: leave all formats from camera as they are
+*         options-update-interval: 1000 - (uint32_t) time interval in milliseconds for option value change notifications
+*             (see rs2_set_options_changed_callback)
+* \param[out] error  If non-null, receives any error that occurs during this call, otherwise, errors are ignored.
+* \return            Context object
+*/
+rs2_context* rs2_create_context_ex(int api_version, const char * json_settings, rs2_error** error);
 
 /**
 * \brief Frees the relevant context object.
@@ -81,6 +107,18 @@ void rs2_context_remove_device(rs2_context* ctx, const char* file, rs2_error** e
 void rs2_context_unload_tracking_module(rs2_context* ctx, rs2_error** error);
 
 /**
+* Converts a legacy ROS1 .bag recording file to a ROS2 .db3 file.
+* \param[in] input_bag_path   Path to the input .bag file
+* \param[in] output_db3_path  Path for the output .db3 file
+* \param[in] ctx              A RealSense context
+* \param[in] callback         Optional progress callback, receives a float in [0,1]
+* \param[in] client_data      User data passed to the callback
+* \param[out] error           If non-null, receives any error that occurs during this call, otherwise, errors are ignored
+*/
+void rs2_convert_bag_to_db3(const char* input_bag_path, const char* output_db3_path, const rs2_context* ctx,
+                            rs2_update_progress_callback_ptr callback, void* client_data, rs2_error** error);
+
+/**
 * create a static snapshot of all connected devices at the time of the call
 * \param context     Object representing librealsense session
 * \param[out] error  if non-null, receives any error that occurs during this call, otherwise, errors are ignored
@@ -95,7 +133,9 @@ rs2_device_list* rs2_query_devices(const rs2_context* context, rs2_error** error
 #define RS2_PRODUCT_LINE_SR300          0x04
 #define RS2_PRODUCT_LINE_L500           0x08
 #define RS2_PRODUCT_LINE_T200           0x10
-#define RS2_PRODUCT_LINE_DEPTH      (RS2_PRODUCT_LINE_L500 | RS2_PRODUCT_LINE_SR300 | RS2_PRODUCT_LINE_D400)
+#define RS2_PRODUCT_LINE_D500           0x20
+#define RS2_PRODUCT_LINE_SW_ONLY       0x100  // enable to return only SW devices, including playback
+#define RS2_PRODUCT_LINE_DEPTH      ( RS2_PRODUCT_LINE_L500 | RS2_PRODUCT_LINE_SR300 | RS2_PRODUCT_LINE_D400 | RS2_PRODUCT_LINE_D500 )
 #define RS2_PRODUCT_LINE_TRACKING   RS2_PRODUCT_LINE_T200
 
 /**

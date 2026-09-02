@@ -1,12 +1,16 @@
 # Linux Distribution
 
 #### Using pre-build packages
-**Intel® RealSense™ SDK 2.0** provides installation packages for Intel X86/AMD64-based Debian distributions in [`dpkg`](https://en.wikipedia.org/wiki/Dpkg) format for Ubuntu 16/18/20/22 [LTS](https://wiki.ubuntu.com/LTS).    
-The Realsense [DKMS](https://en.wikipedia.org/wiki/Dynamic_Kernel_Module_Support) kernel drivers package (`librealsense2-dkms`) supports Ubuntu LTS kernels 4.4, 4.8, 4.10, 4.13, 4.15, 4.18*, 5.0*, 5.3*, 5.4, 5.13 and 5.15. Please refer to [Ubuntu Kernel Release Schedule](https://wiki.ubuntu.com/Kernel/Support) for further details.
+**RealSense™ SDK 2.0** provides installation packages for Intel X86/AMD64/ARM-based Debian distributions in [`dpkg`](https://en.wikipedia.org/wiki/Dpkg) format for Ubuntu 20/22/24 [LTS](https://wiki.ubuntu.com/LTS).
+
+> Note: For EOL Ubuntu distributions please use the following versions:  
+Ubuntu 16 -> [2.51.1](https://github.com/realsenseai/librealsense/releases/tag/v2.51.1).  
+Ubuntu 18 -> [2.55.1](https://github.com/realsenseai/librealsense/releases/tag/v2.55.1).  
+The Realsense [DKMS](https://en.wikipedia.org/wiki/Dynamic_Kernel_Module_Support) kernel drivers package (`librealsense2-dkms`) supports Ubuntu LTS HWE kernels 5.15, 5.19 and 6.5. Please refer to [Ubuntu Kernel Release Schedule](https://wiki.ubuntu.com/Kernel/Support) for further details.
 
 #### Configuring and building from the source code
 While we strongly recommend to use DKMS package whenever possible, there are certain cases where installing and patching the system manually is necessary:
- - Using SDK with non-LTS Ubuntu kernel versions: **4.16 **
+ - Using SDK with non-LTS Ubuntu kernel versions
  - Integration of user-specific patches/modules with `librealsense` SDK.
  - Adjusting the patches for alternative kernels/distributions.
 
@@ -16,16 +20,21 @@ The steps are described in [Linux manual installation guide](./installation.md)
 ## Installing the packages:
 - Register the server's public key:
 ```
+# Ensure the directory exists
 sudo mkdir -p /etc/apt/keyrings
-curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp | sudo tee /etc/apt/keyrings/librealsense.pgp > /dev/null
+
+# Download and dearmor
+curl -sSf https://librealsense.realsenseai.com/Debian/librealsenseai.asc | \
+gpg --dearmor | sudo tee /etc/apt/keyrings/librealsenseai.gpg > /dev/null
 ```
+Note: The keyring contains both the new RS public key and the Intel public key for old repos, ensuring compatibility with both new and existing packages.
 
 - Make sure apt HTTPS support is installed:
 `sudo apt-get install apt-transport-https`
 
 - Add the server to the list of repositories:
 ```
-echo "deb [signed-by=/etc/apt/keyrings/librealsense.pgp] https://librealsense.intel.com/Debian/apt-repo `lsb_release -cs` main" | \
+echo "deb [signed-by=/etc/apt/keyrings/librealsenseai.gpg] https://librealsense.realsenseai.com/Debian/apt-repo `lsb_release -cs` main" | \
 sudo tee /etc/apt/sources.list.d/librealsense.list
 sudo apt-get update
 ```
@@ -40,7 +49,7 @@ sudo apt-get update
   `sudo apt-get install librealsense2-dbg`  
   With `dev` package installed, you can compile an application with **librealsense** using `g++ -std=c++11 filename.cpp -lrealsense2` or an IDE of your choice.
 
-Reconnect the Intel RealSense depth camera and run: `realsense-viewer` to verify the installation.
+Reconnect the RealSense depth camera and run: `realsense-viewer` to verify the installation.
 
 Verify that the kernel is updated :    
 `modinfo uvcvideo | grep "version:"` should include `realsense` string

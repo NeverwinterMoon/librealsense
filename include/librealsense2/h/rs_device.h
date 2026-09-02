@@ -1,5 +1,5 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-   Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+   Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 /** \file rs_device.h
 * \brief Exposes RealSense device functionality for C compilers
@@ -55,6 +55,12 @@ rs2_device* rs2_create_device(const rs2_device_list* info_list, int index, rs2_e
 void rs2_delete_device(rs2_device* device);
 
 /**
+* \param[in]  device    Realsense device to query
+* \return               True if device is still present in the system
+*/
+int rs2_device_is_connected( const rs2_device * device, rs2_error ** error );
+
+/**
 * Retrieve camera specific information, like versions of various internal components.
 * \param[in]  device    The RealSense device
 * \param[in]  info      Camera info type to retrieve
@@ -79,6 +85,12 @@ int rs2_supports_device_info(const rs2_device* device, rs2_camera_info info, rs2
  * \param[out] error    If non-null, receives any error that occurs during this call, otherwise, errors are ignored
  */
 void rs2_hardware_reset(const rs2_device * device, rs2_error ** error);
+
+/**
+* Check if a camera is in recovery mode
+* \param[in]  device    The RealSense device to check
+* \param[out] error     If non-null, receives any error that occurs during this call, otherwise, errors are ignored*/
+int rs2_is_in_recovery_mode(const rs2_device* device, rs2_error** error);
 
 /**
 * Build debug_protocol raw data command from opcode, parameters and data.
@@ -591,6 +603,22 @@ float rs2_calculate_target_z_cpp(rs2_device* device, rs2_frame_queue* queue1, rs
 */
 float rs2_calculate_target_z(rs2_device* device, rs2_frame_queue* queue1, rs2_frame_queue* queue2, rs2_frame_queue* queue3,
     float target_width, float target_height, rs2_update_progress_callback_ptr progress_callback, void* client_data, rs2_error** error);
+
+/**
+* rs2_get_calibration_config
+* \param[in]  device        Device
+* \param[out] error         If non-null, receives any error that occurs during this call, otherwise, errors are ignored
+* \return                   JSON string representing the calibration config as rs2_raw_data_buffer
+*/
+const rs2_raw_data_buffer* rs2_get_calibration_config(rs2_device* device, rs2_error** error);
+
+/**
+* rs2_set_calibration_config
+* \param[in]  sensor                           Safety sensor
+* \param[in]  calibration_config_json_str      Calibration config as JSON string
+* \param[out] error                            If non-null, receives any error that occurs during this call, otherwise, errors are ignored
+*/
+void rs2_set_calibration_config(rs2_device* device, const char* calibration_config_json_str,  rs2_error** error);
 
 #ifdef __cplusplus
 }

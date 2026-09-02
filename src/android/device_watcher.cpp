@@ -1,12 +1,9 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2019 RealSense, Inc. All Rights Reserved.
 #include "device_watcher.h"
 #include <vector>
 #include <sstream>
-#include <jni.h>
 #include "../usb/usb-device.h"
-#include "../usbhost/device-usbhost.h"
-#include "../backend.h"
 #include "../usb/usb-enumerator.h"
 #include "../hid/hid-device.h"
 #include "../uvc/uvc-device.h"

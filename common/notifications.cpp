@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #ifdef _MSC_VER
 #ifndef NOMINMAX
@@ -9,6 +9,7 @@
 
 #include "notifications.h"
 #include <imgui_internal.h>
+#include <realsense_imgui.h>
 #include "model-views.h"
 #include "os.h"
 #include "viewer.h"
@@ -148,7 +149,7 @@ namespace rs2
             if (pbar.contains(mouse.cursor))
             {
                 std::string progress_str = rsutils::string::from() << progress << "%";
-                ImGui::SetTooltip("%s", progress_str.c_str());
+                RsImGui::CustomTooltip("%s", progress_str.c_str());
             }
         }
 
@@ -423,7 +424,7 @@ namespace rs2
                 ImGui::PushStyleColor(ImGuiCol_Button, transparent);
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive, transparent);
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, transparent);
-                string id = rsutils::string::from() << textual_icons::dotdotdot << "##" << index;
+                string id = rsutils::string::from() << textual_icons::ellipsis_h << "##" << index;
                 if (ImGui::Button(id.c_str()))
                 {
                     selected = shared_from_this();
@@ -614,7 +615,7 @@ namespace rs2
 
                 auto s = ss.str();
                 ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, regular_blue);
-                ImGui::InputTextMultiline("notification", const_cast<char*>(s.c_str()),
+                ImGui::InputTextMultiline("##notification", const_cast<char*>(s.c_str()),
                     s.size() + 1, { 500,100 }, ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly);
                 ImGui::PopStyleColor();
 
@@ -628,7 +629,7 @@ namespace rs2
                 {
                     std::string clip = "";
                     auto lines = split_string(selected->message, '\n');
-                    for (auto line : lines)
+                    for (auto & line : lines)
                     {
                         if (line.size() && line[0] == '$') clip += line.substr(2) + "\n";
                     }
@@ -640,7 +641,7 @@ namespace rs2
                             glfwSetClipboardString(win, clip.c_str());
                         }
                         if (ImGui::IsItemActive())
-                            ImGui::SetTooltip("Paste the copied commands to a terminal and enter your password to run");
+                            RsImGui::CustomTooltip("Paste the copied commands to a terminal and enter your password to run");
                     }
                 }
 
@@ -707,9 +708,9 @@ namespace rs2
 
         ImGui::SetCursorScreenPos({ float(x + 17), float(y + 41) });
 
-        std::string link = rsutils::string::from() << "https://github.com/IntelRealSense/librealsense/wiki/Release-Notes#release-" << _version;
+        std::string link = rsutils::string::from() << "https://github.com/realsenseai/librealsense/wiki/Release-Notes#release-" << _version;
 
-        ImGui::PushStyleColor(ImGuiCol_Text, alpha(white, 1.f - t));
+        ImGui::PushStyleColor(ImGuiCol_Text, alpha(light_blue, 1.f - t));
         if (ImGui::Button("What's new"))
         {
             open_url(link.c_str());
@@ -718,7 +719,7 @@ namespace rs2
         if (ImGui::IsItemHovered())
         {
             win.link_hovered();
-            ImGui::SetTooltip("Open the Release Notes. Internet connection is required");
+            RsImGui::CustomTooltip("Open the Release Notes. Internet connection is required");
         }
         ImGui::SameLine();
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 5);
@@ -735,6 +736,12 @@ namespace rs2
     {
         std::lock_guard<std::mutex> lock(_log_lock);
         _log += line + "\n";
+    }
+
+    const std::string process_manager::get_log() const
+    {
+        std::lock_guard< std::mutex > lock( _log_lock );
+        return _log;
     }
 
     void process_manager::reset()
@@ -864,7 +871,7 @@ namespace rs2
 
             ImGui::SetCursorScreenPos({ float(x + 10), float(y + 35) });
             ImGui::PushFont(win.get_large_font());
-            std::string txt = rsutils::string::from() << textual_icons::throphy;
+            std::string txt = rsutils::string::from() << textual_icons::trophy;
             ImGui::Text("%s", txt.c_str());
             ImGui::PopFont();
 
@@ -997,7 +1004,7 @@ namespace rs2
 
         if (ImGui::IsItemHovered())
         {
-            ImGui::SetTooltip("%s", "Enables metadata on connected devices (you may be prompted for administrator privileges)");
+            RsImGui::CustomTooltip("%s", "Enables metadata on connected devices (you may be prompted for administrator privileges)");
         }
     }
 
@@ -1102,7 +1109,7 @@ namespace rs2
         if (ImGui::IsItemHovered())
         {
             win.link_hovered();
-            ImGui::SetTooltip("Internet connection required");
+            RsImGui::CustomTooltip("Internet connection required");
         }
         ImGui::PopStyleColor(2);
     }
@@ -1144,7 +1151,7 @@ namespace rs2
 
         ImGui::SetCursorScreenPos({ float(x + 10), float(y + 35) });
         ImGui::PushFont(win.get_large_font());
-        std::string txt = rsutils::string::from() << textual_icons::throphy;
+        std::string txt = rsutils::string::from() << textual_icons::trophy;
         ImGui::Text("%s", txt.c_str());
         ImGui::PopFont();
 
@@ -1179,9 +1186,9 @@ namespace rs2
         ImGui::PopStyleColor();
 
         ImGui::SetCursorScreenPos({ float(x + 10), float(y + 47) });
-        hyperlink(win, "1. Self-Calibration Whitepaper", "https://dev.intelrealsense.com/docs/self-calibration-for-depth-cameras");
+        hyperlink(win, "1. Self-Calibration Whitepaper", "https://dev.realsenseai.com/docs/self-calibration-for-depth-cameras");
         ImGui::SetCursorScreenPos({ float(x + 10), float(y + 67) });
-        hyperlink(win, "2. Firmware Releases / Errata", "https://dev.intelrealsense.com/docs/firmware-releases");
+        hyperlink(win, "2. Firmware Releases / Errata", "https://dev.realsenseai.com/docs/firmware-updates");
 
     }
 
@@ -1209,6 +1216,38 @@ namespace rs2
         ImGui::SetCursorScreenPos({ float(x + 5), float(y + 25) });
         ImGui::GetWindowDrawList()->AddRectFilled({ float(x+2), float(y+27) },
             { float(x + width), float(y + 79) }, ImColor(orange));
+        ImGui::PushStyleColor(ImGuiCol_Text, light_grey);
+        draw_text(get_title().c_str(), x, y, height - 50);
+        ImGui::PopStyleColor();
+    }
+
+    udev_warning_model::udev_warning_model()
+        : notification_model()
+    {
+        enable_expand = false;
+        enable_dismiss = true;
+        enable_complex_dismiss = true; // Allow "don't show again"
+        pinned = false;
+        delay_id = "udev_warning.linux";
+        severity = RS2_LOG_SEVERITY_WARN;
+        category = RS2_NOTIFICATION_CATEGORY_UNKNOWN_ERROR;
+        message = "UDEV support not enabled in this build.\n"
+            "For better device detection and stability,\n"
+            "install the libudev development headers for your distribution\n"
+            "(e.g. on Debian/Ubuntu: sudo apt install libudev-dev)\n"
+            "and then rebuild librealsense from source.";
+    }
+
+    void udev_warning_model::draw_content(ux_window& win, int x, int y, float t, std::string& error_message)
+    {
+        ImGui::SetCursorScreenPos({ float(x + 9), float(y + 4) });
+
+        ImGui::GetWindowDrawList()->AddRectFilled({ float(x), float(y) },
+            { float(x + width), float(y + 25) }, ImColor(yellow)); // Use yellow for warning
+
+        ImGui::Text("UDEV Not Enabled");
+
+        ImGui::SetCursorScreenPos({ float(x + 5), float(y + 30) });
         ImGui::PushStyleColor(ImGuiCol_Text, light_grey);
         draw_text(get_title().c_str(), x, y, height - 50);
         ImGui::PopStyleColor();

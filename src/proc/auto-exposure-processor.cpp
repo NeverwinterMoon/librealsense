@@ -1,7 +1,8 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2019 RealSense, Inc. All Rights Reserved.
 
 #include "auto-exposure-processor.h"
+#include <src/frame.h>
 
 librealsense::auto_exposure_processor::auto_exposure_processor(rs2_stream stream, enable_auto_exposure_option& enable_ae_option)
     : auto_exposure_processor("Auto Exposure Processor", stream, enable_ae_option) {}

@@ -9,12 +9,12 @@ import pyrealsense2 as rs
 import numpy as np
 
 """
-  _   _        _                      _____                     _    _                    
- | | | |  ___ | | _ __    ___  _ __  |  ___|_   _  _ __    ___ | |_ (_)  ___   _ __   ___ 
+  _   _        _                      _____                     _    _
+ | | | |  ___ | | _ __    ___  _ __  |  ___|_   _  _ __    ___ | |_ (_)  ___   _ __   ___
  | |_| | / _ \| || '_ \  / _ \| '__| | |_  | | | || '_ \  / __|| __|| | / _ \ | '_ \ / __|
  |  _  ||  __/| || |_) ||  __/| |    |  _| | |_| || | | || (__ | |_ | || (_) || | | |\__ \
  |_| |_| \___||_|| .__/  \___||_|    |_|    \__,_||_| |_| \___| \__||_| \___/ |_| |_||___/
-                 |_|                                                                      
+                 |_|
 """
 
 
@@ -26,7 +26,7 @@ class Device:
 
 def enumerate_connected_devices(context):
     """
-    Enumerate the connected Intel RealSense devices
+    Enumerate the connected RealSense devices
 
     Parameters:
     -----------
@@ -53,7 +53,7 @@ def enumerate_connected_devices(context):
 def post_process_depth_frame(depth_frame, decimation_magnitude=1.0, spatial_magnitude=2.0, spatial_smooth_alpha=0.5,
                              spatial_smooth_delta=20, temporal_smooth_alpha=0.4, temporal_smooth_delta=20):
     """
-    Filter the depth frame acquired using the Intel RealSense device
+    Filter the depth frame acquired using the RealSense device
 
     Parameters:
     -----------
@@ -107,19 +107,19 @@ def post_process_depth_frame(depth_frame, decimation_magnitude=1.0, spatial_magn
 
 
 """
-  __  __         _           ____               _                _   
- |  \/  |  __ _ (_) _ __    / ___| ___   _ __  | |_  ___  _ __  | |_ 
+  __  __         _           ____               _                _
+ |  \/  |  __ _ (_) _ __    / ___| ___   _ __  | |_  ___  _ __  | |_
  | |\/| | / _` || || '_ \  | |    / _ \ | '_ \ | __|/ _ \| '_ \ | __|
- | |  | || (_| || || | | | | |___| (_) || | | || |_|  __/| | | || |_ 
+ | |  | || (_| || || | | | | |___| (_) || | | || |_|  __/| | | || |_
  |_|  |_| \__,_||_||_| |_|  \____|\___/ |_| |_| \__|\___||_| |_| \__|
 
 """
 
 
 class DeviceManager:
-    def __init__(self, context, D400_pipeline_configuration, L500_pipeline_configuration = rs.config()):
+    def __init__(self, context, D400_pipeline_configuration):
         """
-        Class to manage the Intel RealSense devices
+        Class to manage the RealSense devices
 
         Parameters:
         -----------
@@ -128,23 +128,18 @@ class DeviceManager:
         D400_pipeline_configuration  : rs.config()
                                   The realsense library configuration to be used for the application when D400 product is attached.
 
-        L500_pipeline_configuration  : rs.config()
-                                  The realsense library configuration to be used for the application when L500 product is attached.
-
         """
         assert isinstance(context, type(rs.context()))
         assert isinstance(D400_pipeline_configuration, type(rs.config()))
-        assert isinstance(L500_pipeline_configuration, type(rs.config()))
         self._context = context
         self._available_devices = enumerate_connected_devices(context)
         self._enabled_devices = {} #serial numbers of te enabled devices
         self.D400_config = D400_pipeline_configuration
-        self.L500_config = L500_pipeline_configuration
         self._frame_counter = 0
 
     def enable_device(self, device_info, enable_ir_emitter):
         """
-        Enable an Intel RealSense Device
+        Enable a RealSense Device
 
         Parameters:
         -----------
@@ -159,14 +154,12 @@ class DeviceManager:
         device_serial = device_info[0]
         product_line = device_info[1]
 
-        if product_line == "L500":
-            # Enable L515 device
-            self.L500_config.enable_device(device_serial)
-            pipeline_profile = pipeline.start(self.L500_config)
-        else: 
+        if product_line == "D400":
             # Enable D400 device
             self.D400_config.enable_device(device_serial)
             pipeline_profile = pipeline.start(self.D400_config)
+        else:
+            raise RuntimeError( f'unknown product line {product_line}' )
 
 
         # Set the acquisition parameters
@@ -177,7 +170,7 @@ class DeviceManager:
 
     def enable_all_devices(self, enable_ir_emitter=False):
         """
-        Enable all the Intel RealSense Devices which are connected to the PC
+        Enable all the RealSense Devices which are connected to the PC
 
         """
         print(str(len(self._available_devices)) + " devices have been found")
@@ -209,7 +202,7 @@ class DeviceManager:
         	json_text = file.read().strip()
 
         for (device_serial, device) in self._enabled_devices.items():
-            if device.product_line == "L500":
+            if device.product_line != "D400":
                 continue
             # Get the active profile and load the json file which contains settings readable by the realsense
             device = device.pipeline_profile.get_device()
@@ -218,9 +211,9 @@ class DeviceManager:
 
     def poll_frames(self):
         """
-        Poll for frames from the enabled Intel RealSense devices. This will return at least one frame from each device. 
+        Poll for frames from the enabled RealSense devices. This will return at least one frame from each device.
         If temporal post processing is enabled, the depth stream is averaged over a certain amount of frames
-        
+
         Parameters:
         -----------
         """
@@ -244,7 +237,7 @@ class DeviceManager:
         return frames
 
     def get_depth_shape(self):
-        """ 
+        """
         Retruns width and height of the depth stream for one arbitrary device
 
         Returns:
@@ -268,7 +261,7 @@ class DeviceManager:
         Parameters:
         -----------
         frames : rs::frame
-                 The frame grabbed from the imager inside the Intel RealSense for which the intrinsic is needed
+                 The frame grabbed from the imager inside the RealSense for which the intrinsic is needed
 
         Return:
         -----------
@@ -293,7 +286,7 @@ class DeviceManager:
         Parameters:
         -----------
         frames : rs::frame
-                 The frame grabbed from the imager inside the Intel RealSense for which the intrinsic is needed
+                 The frame grabbed from the imager inside the RealSense for which the intrinsic is needed
 
         Return:
         -----------
@@ -313,16 +306,15 @@ class DeviceManager:
 
     def disable_streams(self):
         self.D400_config.disable_all_streams()
-        self.L500_config.disable_all_streams()
 
 
 """
-  _____           _    _               
- |_   _|___  ___ | |_ (_) _ __    __ _ 
+  _____           _    _
+ |_   _|___  ___ | |_ (_) _ __    __ _
    | | / _ \/ __|| __|| || '_ \  / _` |
    | ||  __/\__ \| |_ | || | | || (_| |
    |_| \___||___/ \__||_||_| |_| \__, |
-                                  |___/ 
+                                  |___/
 
 """
 if __name__ == "__main__":

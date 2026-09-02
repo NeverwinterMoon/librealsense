@@ -1,5 +1,4 @@
-#  minimum required cmake version: 3.1.0
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.10)
 
 project(RealsensePythonWrappers)
 
@@ -9,6 +8,7 @@ set(PYRS_CPP
     pyrs_advanced_mode.cpp
     pyrs_context.cpp
     pyrs_device.cpp
+    pyrs_eth_config.cpp
     pyrs_export.cpp
     pyrs_frame.cpp
     pyrs_internal.cpp
@@ -46,7 +46,7 @@ set(RAW_RS
     ../../src/frame.cpp
     ../../src/environment.cpp
     ../../src/to-string.cpp
-    ../../src/core/streaming.cpp
+    ../../src/core/options-registry.cpp
 )
 
 if(UNIX)
@@ -97,12 +97,12 @@ if(${FORCE_RSUSB_BACKEND})
         ../../src/hid/hid-device.cpp
         ../../src/hid/hid-device.h
     )
-if(APPLE)
-    list(APPEND RAW_RS
-        ../../third-party/hidapi/hidapi.cpp
-        ../../third-party/hidapi/hidapi.h
-    )
-endif()
+    if(APPLE)
+        list(APPEND RAW_RS
+            ../../third-party/hidapi/hidapi.cpp
+            ../../third-party/hidapi/hidapi.h
+        )
+    endif()
 endif()
 
 if(${BUILD_EASYLOGGINGPP})
@@ -126,26 +126,58 @@ if(${BACKEND} STREQUAL RS2_USE_LIBUVC_BACKEND)
     )
 endif()
 
-pybind11_add_module(pybackend2 SHARED ${RAW_RS})
+if( BUILD_LEGACY_PYBACKEND )
+    pybind11_add_module(pybackend2 SHARED ${RAW_RS})
 
-if(USE_EXTERNAL_USB)
-    add_dependencies(pybackend2 libusb)
-endif()
-target_link_libraries(pybackend2 PRIVATE rsutils usb ${CMAKE_THREAD_LIBS_INIT})
-set_target_properties(pybackend2 PROPERTIES
-                        VERSION     ${REALSENSE_VERSION_STRING}
-                        SOVERSION   ${REALSENSE_VERSION_MAJOR})
-set_target_properties( pybackend2
-    PROPERTIES
-        FOLDER Library/Python
+    if(USE_EXTERNAL_USB)
+        add_dependencies(pybackend2 libusb)
+    endif()
+    target_link_libraries(pybackend2 PRIVATE rsutils usb ${CMAKE_THREAD_LIBS_INIT})
+    set_target_properties(pybackend2 PROPERTIES
+                            VERSION     ${REALSENSE_VERSION_STRING}
+                            SOVERSION   ${REALSENSE_VERSION_MAJOR})
+    set_target_properties( pybackend2
+        PROPERTIES
+            FOLDER Library/Python
+        )
+    target_include_directories(pybackend2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../include)
+
+    if(${FORCE_RSUSB_BACKEND})
+        if(APPLE)
+            target_include_directories(pybackend2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../third-party/hidapi/)
+        endif()
+    endif()
+
+    if(${BACKEND} STREQUAL RS2_USE_V4L2_BACKEND)
+        if(UDEV_FOUND)
+            target_sources( pybackend2
+                PRIVATE
+                    ../../src/linux/udev-device-watcher.cpp
+                    ../../src/linux/udev-device-watcher.h
+                )
+            target_link_libraries( pybackend2 PRIVATE udev )
+            target_compile_definitions( pybackend2 PRIVATE -DUSING_UDEV )
+        endif()
+    endif()
+
+    install(TARGETS pybackend2 pyrealsense2
+        EXPORT pyrealsense2Targets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${PYTHON_INSTALL_DIR}
+        ARCHIVE DESTINATION ${PYTHON_INSTALL_DIR}
     )
-target_include_directories(pybackend2 PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
-if(${FORCE_RSUSB_BACKEND})
-if(APPLE)
-    target_include_directories(pybackend2 PRIVATE ${CMAKE_SOURCE_DIR}/third-party/hidapi/)
-endif()
-endif()
+    target_include_directories(pybackend2 PRIVATE ../../src)
+
+else() # not BUILD_LEGACY_PYBACKEND
+
+    install(TARGETS pyrealsense2
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${PYTHON_INSTALL_DIR}
+        ARCHIVE DESTINATION ${PYTHON_INSTALL_DIR}
+    )
+
+endif()  # BUILD_LEGACY_PYBACKEND
 
 write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/pyrealsense2ConfigVersion.cmake"
     VERSION ${REALSENSE_VERSION_STRING} COMPATIBILITY AnyNewerVersion)
@@ -154,13 +186,6 @@ configure_package_config_file(../../CMake/pyrealsense2Config.cmake.in pyrealsens
     INSTALL_DESTINATION ${CMAKECONFIG_PY_INSTALL_DIR}
     INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX}/bin
     PATH_VARS CMAKE_INSTALL_INCLUDEDIR
-)
-
-install(TARGETS pybackend2 pyrealsense2
-    EXPORT pyrealsense2Targets
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    LIBRARY DESTINATION ${PYTHON_INSTALL_DIR}
-    ARCHIVE DESTINATION ${PYTHON_INSTALL_DIR}
 )
 
 install(EXPORT pyrealsense2Targets
@@ -176,7 +201,10 @@ install(FILES "${CMAKE_BINARY_DIR}/wrappers/python/pyrealsense2ConfigVersion.cma
     DESTINATION ${CMAKECONFIG_PY_INSTALL_DIR}
 )
 
-target_include_directories(pybackend2 PRIVATE ../../src)
+install(FILES pyrealsense2/__init__.py
+    DESTINATION ${PYTHON_INSTALL_DIR}
+)
+
 target_include_directories(pyrealsense2 PRIVATE ../../src)
 
 if (BUILD_PYTHON_DOCS)

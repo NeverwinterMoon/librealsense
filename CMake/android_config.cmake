@@ -6,35 +6,27 @@ macro(os_set_flags)
     unset(UNIX)
     unset(APPLE)
     set(BUILD_UNIT_TESTS OFF)
-    set(BUILD_LEGACY_LIVE_TEST OFF)
     set(BUILD_EXAMPLES OFF)
     set(BUILD_TOOLS OFF)
-    set(BUILD_WITH_OPENMP OFF)
+    set(BUILD_WITH_OPENMP OFF)    
     set(BUILD_GRAPHICAL_EXAMPLES OFF)
     set(ANDROID_STL "c++_static")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}   -fPIC -pedantic -g -D_DEFAULT_SOURCE")
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}   -fPIC -pedantic -g -D_DEFAULT_SOURCE")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -pedantic -g -Wno-missing-field-initializers")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-switch -Wno-multichar")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fPIE -pie")
-
-    #    Add 16KB page size support for Android
-    #    https://developer.android.com/guide/practices/page-sizes#build
-    #    It's possible to forgo this when using NDK version r28 or higher
-    #    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
-
     set(HWM_OVER_XU ON)
-
-    if (FORCE_RSUSB_BACKEND)
+	
+    if(FORCE_RSUSB_BACKEND)
         set(BACKEND RS2_USE_ANDROID_BACKEND)
-        set(IMPORT_DEPTH_CAM_FW OFF)
-    else ()
+    else()
         set(BACKEND RS2_USE_V4L2_BACKEND)
-    endif ()
+    endif()
 endmacro()
 
 macro(os_target_config)
-    if (BUILD_SHARED_LIBS)
+    if(BUILD_SHARED_LIBS)
         find_library(log-lib log)
         target_link_libraries(${LRS_TARGET} PRIVATE log)
-    endif ()
+    endif()
 endmacro()

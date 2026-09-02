@@ -1,5 +1,5 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 #pragma once
 
@@ -7,6 +7,32 @@ Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
 
 #define NAME pyrealsense2
 #define SNAME "pyrealsense2"
+
+// GIL-releasing custom deleter for pybind11 holder types.
+//
+// When a Python reference to a librealsense wrapper (rs.device, rs.sensor, rs.debug_protocol, ...) is dropped,
+// CPython calls tp_dealloc on the wrapper while the calling thread still holds the GIL.
+// The default holder (std::unique_ptr<T>) runs the C++ destructor, which might wait for a Python callback on another thread
+// (e.g. notifications_processor::~notifications_processor() ) that might need to re-acquire the GIL, causing a deadlock if
+// we don't release the GIL before the destructor runs.
+//
+// This deleter releases the GIL before delete and re-acquires it after, so the destructor runs without the GIL.
+// Any nested gil_scoped_acquire (e.g. pybind11's func_handle destructor freeing a stored Python callback) just
+// re-acquires it briefly -- safe and standard.
+template < typename T >
+struct gil_releasing_deleter
+{
+    void operator()( T * p ) const noexcept
+    {
+        py::gil_scoped_release release;
+        delete p;
+    }
+};
+
+template < typename T >
+using py_holder = std::unique_ptr< T, gil_releasing_deleter< T > >;
+
+PYBIND11_DECLARE_HOLDER_TYPE( T, py_holder< T > )
 
 // For rs2_format
 #include "../include/librealsense2/h/rs_sensor.h"
@@ -202,7 +228,7 @@ public:
 /*PYBIND11_MAKE_OPAQUE(std::vector<rs2::stream_profile>)*/
 
 // Partial module definition functions
-void init_c_files(py::module &m);
+void init_c_files(py::module& m);
 void init_types(py::module &m);
 void init_frame(py::module &m);
 void init_options(py::module &m);
@@ -217,3 +243,4 @@ void init_export(py::module &m);
 void init_advanced_mode(py::module &m);
 void init_serializable_device(py::module& m);
 void init_util(py::module &m);
+void init_eth_config(py::module &m);

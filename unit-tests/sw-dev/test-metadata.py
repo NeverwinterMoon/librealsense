@@ -1,5 +1,5 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2023 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2023 RealSense, Inc. All Rights Reserved.
 
 import pyrealsense2 as rs
 from rspy import log, test
@@ -24,8 +24,14 @@ try:
         # Publish a frame
         f = sensor.publish( depth.frame() )
 
+        # Some metadata may be automatically added, even for software sensors
+        expected = set()
         for md in frame_metadata_values():
-            test.check_false( f.supports_frame_metadata( md ))
+            test.info( 'metadata', md )
+            if md in expected:
+                test.check( f.supports_frame_metadata( md ))
+            else:
+                test.check_false( f.supports_frame_metadata( md ))
 except:
     test.unexpected_exception()
 test.finish()

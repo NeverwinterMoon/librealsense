@@ -1,10 +1,11 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
-#test:timeout 20
-#test:device each(D400*) !D455
-#test:device SR300*
-#test:device L500*
+# test:timeout 20
+# test:device each(D400*)
+# test:device each(D500*)
+# Running weekly as this tests a specific bug fix in code that is seldom touched
+# test:donotrun:!weekly
 
 import os
 import pyrealsense2 as rs2

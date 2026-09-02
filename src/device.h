@@ -1,51 +1,61 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
+#include "basics.h"  // C4250
+#include <src/core/device-interface.h>
+#include <src/core/info.h>
+#include <src/core/features-container.h>
+
+#include "device-info.h"
+
+#include <rsutils/lazy.h>
+#include <rsutils/subscription.h>
 #include <chrono>
 #include <memory>
 #include <vector>
+#include <atomic>
 
-#include "backend.h"
-#include "archive.h"
-#include "hw-monitor.h"
-#include "option.h"
-#include "sensor.h"
-#include "sync.h"
-#include "core/streaming.h"
 
-#include "context.h"
+namespace librealsense {
 
-namespace librealsense
+
+// Device profiles undergo format conversion before becoming available to the user. This is typically done within each
+// sensor's init_stream_profiles(), but the behavior can be overriden by the user through the device JSON settings (see
+// device ctor) to enable querying the device's raw or basic formats only.
+// 
+// Note that streaming may be available only with full (the default) profiles. The others are for inspection only, and
+// can directly be queried in rs-enumerate-devices.
+// 
+// Note also that default profiles (those returned by get_profiles_tags()) must take the conversion method into account
+// or profiles may not get tagged correctly in non-full modes.
+//
+enum class format_conversion
 {
+    // Report raw profiles as provided by the camera, without any manipulation whatsoever by librealsense.
+    raw,
 
-    
-stream_interface * find_profile( rs2_stream stream, int index, std::vector< stream_interface * > const & profiles );
+    // Take the raw profiles, perform the librealsense mappings, but then remove any "unwanted" mappings:
+    //      - any conversion between formats is thrown away (e.g., YUYV->RGB8)
+    //      - colored infrared is removed
+    //      - interleaved (Y12I, Y8I) are kept (so become Y16 and Y8, respectively)
+    // See formats_converter::drop_non_basic_formats()
+    basic,
 
-class matcher_factory
-{
-public:
-    static std::shared_ptr< matcher > create( rs2_matchers matcher,
-                                                std::vector< stream_interface * > const & profiles );
-
-private:
-    static std::shared_ptr< matcher > create_DLR_C_matcher( std::vector< stream_interface * > const & profiles );
-    static std::shared_ptr< matcher > create_DLR_matcher( std::vector< stream_interface * > const & profiles );
-    static std::shared_ptr< matcher > create_DI_C_matcher( std::vector< stream_interface * > const & profiles );
-    static std::shared_ptr< matcher > create_DI_matcher( std::vector< stream_interface * > const & profiles );
-    static std::shared_ptr< matcher > create_DIC_matcher( std::vector< stream_interface* > const& profiles );
-    static std::shared_ptr< matcher > create_DIC_C_matcher( std::vector< stream_interface * > const & profiles );
-
-    static std::shared_ptr< matcher > create_identity_matcher( stream_interface * profiles );
-    static std::shared_ptr< matcher > create_frame_number_matcher( std::vector< stream_interface * > const & profiles );
-    static std::shared_ptr< matcher > create_timestamp_matcher( std::vector< stream_interface * > const & profiles );
-
-    static std::shared_ptr< matcher > create_timestamp_composite_matcher( std::vector< std::shared_ptr< matcher > > const & matchers );
-    static std::shared_ptr< matcher > create_frame_number_composite_matcher( std::vector< std::shared_ptr< matcher > > const & matchers );
+    // The default conversion mode: all the librealsense mappings are intact; the user will see profiles including
+    // format conversions (e.g., YUYV->RGB8), etc.
+    full
 };
 
-class device : public virtual device_interface, public info_container
+
+// Base implementation for most devices in librealsense. While it's not necessary to derive from this class, it greatly
+// simplifies implementations.
+//
+class device
+    : public virtual device_interface
+    , public info_container
+    , public features_container
 {
 public:
     virtual ~device();
@@ -60,22 +70,15 @@ public:
 
     size_t find_sensor_idx(const sensor_interface& s) const;
 
-    std::shared_ptr<context> get_context() const override {
-        return _context;
-    }
+    std::shared_ptr< context > get_context() const override { return _dev_info->get_context(); }
 
-    platform::backend_device_group get_device_data() const override
-    {
-        return _group;
-    }
+    std::shared_ptr< const device_info > get_device_info() const override { return _dev_info; }
 
     std::pair<uint32_t, rs2_extrinsics> get_extrinsics(const stream_interface& stream) const override;
 
-    bool is_valid() const override
-    {
-        std::lock_guard<std::mutex> lock(_device_changed_mtx);
-        return _is_valid;
-    }
+    bool is_valid() const override { return *_is_alive; }
+
+    bool is_in_recovery_mode() const override { return false; }
 
     void tag_profiles(stream_profiles profiles) const override;
 
@@ -85,42 +88,28 @@ public:
 
     virtual void stop_activity() const;
 
-    bool device_changed_notifications_on() const { return _device_changed_notifications; }
+    bool device_changed_notifications_on() const { return _device_change_subscription.is_active(); }
 
-    uint16_t _pid;
+    format_conversion get_format_conversion() const;
+
 protected:
     int add_sensor(const std::shared_ptr<sensor_interface>& sensor_base);
     int assign_sensor(const std::shared_ptr<sensor_interface>& sensor_base, uint8_t idx);
     void register_stream_to_extrinsic_group(const stream_interface& stream, uint32_t groupd_index);
-    std::vector<rs2_format> map_supported_color_formats(rs2_format source_format);
+    std::vector<rs2_format> map_supported_color_formats(rs2_format source_format, bool should_map_source_format = true);
 
-    explicit device(std::shared_ptr<context> ctx,
-                    const platform::backend_device_group group,
-                    bool device_changed_notifications = true);
+    explicit device( std::shared_ptr< const device_info > const &, bool device_changed_notifications = true );
 
     std::map<int, std::pair<uint32_t, std::shared_ptr<const stream_interface>>> _extrinsics;
 
 private:
     std::vector<std::shared_ptr<sensor_interface>> _sensors;
-    std::shared_ptr<context> _context;
-    const platform::backend_device_group _group;
-    bool _is_valid, _device_changed_notifications;
-    mutable std::mutex _device_changed_mtx;
-    uint64_t _callback_id;
-    lazy<std::vector<tagged_profile>> _profiles_tags;
-
-    std::shared_ptr< bool > _is_alive; // Ensures object can be accessed
+    std::shared_ptr< const device_info > _dev_info;
+    std::shared_ptr< std::atomic< bool > > _is_alive;
+    rsutils::subscription _device_change_subscription;
+    rsutils::lazy< std::vector< tagged_profile > > _profiles_tags;
+    rsutils::lazy< format_conversion > _format_conversion;
 };
 
-// Helper function that should be used when multiple FW calls needs to be made.
-// This function change the USB power to D0 (Operational) using the invoke_power function
-// activate the received function and power down the state to D3 (Idle)
-template<class T>
-auto group_multiple_fw_calls(synthetic_sensor& s, T action)
--> decltype(action())
-{
-    auto& us = dynamic_cast<uvc_sensor&>(*s.get_raw_sensor());
 
-    return us.invoke_powered([&](platform::uvc_device& dev) { return action(); });
-}
 }

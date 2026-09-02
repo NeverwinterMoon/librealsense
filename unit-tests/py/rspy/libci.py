@@ -1,5 +1,5 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 import re, os, subprocess, time, sys, platform
 from abc import ABC, abstractmethod
@@ -87,8 +87,10 @@ class TestConfig( ABC ):  # Abstract Base Class
         self._configurations = list()
         self._priority = 1000
         self._tags = set()
+        self._types = set()  # usage: test:type <type> or test:type !<type>
         self._flags = set()
         self._timeout = 200
+        self._retries = 0
         self._context = context
         self._donotrun = False
 
@@ -99,8 +101,10 @@ class TestConfig( ABC ):  # Abstract Base Class
             log.d( 'priority:', self._priority )
         if self._timeout != 200:
             log.d( 'timeout:', self._timeout )
+        if self._retries != 0:
+            log.d( 'retries:', self._retries )
         if len( self._tags ) > 1:
-            log.d( 'tags:', { tag for tag in self._tags if tag != "exe" and tag != "py" } )
+            log.d( 'tags:', self._tags )
         if self._flags:
             log.d( 'flags:', self._flags )
         if len( self._configurations ) > 1:
@@ -120,8 +124,16 @@ class TestConfig( ABC ):  # Abstract Base Class
         return self._timeout
 
     @property
+    def retries( self ):
+        return self._retries
+
+    @property
     def tags( self ):
         return self._tags
+
+    @property
+    def types( self ):
+        return self._types
 
     @property
     def flags( self ):
@@ -186,7 +198,7 @@ class TestConfigFromText( TestConfig ):
                 #      0      |            1             | USE
                 #      1      |            0             | USE
                 #      1      |            1             | IGNORE
-                if not_context == (directive_context in self._context):
+                if not_context == (self._context and directive_context in self._context):
                     # log.d( "directive", line['line'], "ignored because of context mismatch with running context",
                     #       self._context)
                     continue
@@ -224,8 +236,16 @@ class TestConfigFromText( TestConfig ):
                 else:
                     log.e( source + '+' + str( line['index'] ) + ': timeout directive with invalid parameters:',
                            params )
+            elif directive == 'retries':
+                if len( params ) == 1 and params[0].isdigit():
+                    self._retries = int( params[0] )
+                else:
+                    log.e( source + '+' + str( line['index'] ) + ': timeout directive with invalid parameters:',
+                           params )
             elif directive == 'tag':
                 self._tags.update( map( str.lower, params ))  # tags are case-insensitive
+            elif directive == 'type':
+                self._types.update( map( str.lower, params ))
             elif directive == 'flag':
                 self._flags.update( params )
             elif directive == 'donotrun':
@@ -367,8 +387,10 @@ class PyTest( Test ):
         log.d( 'script:', self.path_to_script )
         Test.debug_dump( self )
 
-    @property
-    def command( self ):
+    def command( self, to_file ):
+        """
+        :param to_file: True if stdout is redirected to a file (so colors make no sense)
+        """
         cmd = [sys.executable]
         #
         # PYTHON FLAGS
@@ -391,7 +413,9 @@ class PyTest( Test ):
             if log.is_debug_on():
                 cmd += ['--debug']
             #
-            if log.is_color_on():
+            if to_file:
+                pass
+            elif log.is_color_on():
                 cmd += ['--color']
             elif log.is_color_disabled():
                 cmd += ['--no-color']
@@ -402,12 +426,14 @@ class PyTest( Test ):
 
     def run_test( self, configuration = None, log_path = None, opts = set() ):
         try:
-            cmd = self.command
+            cmd = self.command( to_file = log_path and log_path != subprocess.PIPE )
             if opts:
                 cmd += [opt for opt in opts]
             run( cmd, stdout=log_path, append=self.ran, timeout=self.config.timeout )
         finally:
             self._ran = True
+            # Small delay to allow any async background commands to complete before port reset
+            time.sleep( 0.1 )
 
 
 class ExeTest( Test ):
@@ -422,8 +448,6 @@ class ExeTest( Test ):
         :param context: context in which the test will run
         """
         global unit_tests_dir
-        if exe and not os.path.isfile( exe ):
-            log.d( "Tried to create exe test with invalid exe file: " + exe )
         Test.__init__( self, testname )
         self.exe = exe
 
@@ -432,9 +456,20 @@ class ExeTest( Test ):
             self._config = TestConfigFromCpp( unit_tests_dir + os.sep + relative_test_path, context )
         else:
             self._config = TestConfig(context)
+            self._config.tags.add( 'exe' )
 
-    @property
-    def command( self ):
+    def debug_dump( self ):
+        if self.exe:
+            if not os.path.isfile( self.exe ):
+                log.d( "exe does not exist: " + self.exe )
+            else:
+                log.d( 'exe:', self.exe )
+        Test.debug_dump( self )
+
+    def command( self, to_file ):
+        """
+        :param to_file: True if stdout is redirected to a file (so colors make no sense)
+        """
         cmd = [self.exe]
         if 'custom-args' not in self.config.flags:
             # Assume we're a Catch2 exe, so:
@@ -444,7 +479,7 @@ class ExeTest( Test ):
                 cmd += ['-d', 'yes']  # show durations for each test-case
                 # cmd += ['--success']  # show successful assertions in output
                 cmd += ['--debug']
-            # if log.is_color_on():
+            # if not to_file and log.is_color_on():
             #    cmd += ['--use-colour', 'yes']
             if self.config.context:
                 cmd += ['--context', ' '.join(self.config.context)]
@@ -454,9 +489,11 @@ class ExeTest( Test ):
         if not self.exe:
             raise RuntimeError("Tried to run test " + self.name + " with no exe file provided")
         try:
-            cmd = self.command
+            cmd = self.command( to_file = log_path and log_path != subprocess.PIPE )
             if opts:
                 cmd += [opt for opt in opts]
             run( cmd, stdout=log_path, append=self.ran, timeout=self.config.timeout )
         finally:
             self._ran = True
+            # Small delay to allow any async background commands to complete before port reset
+            time.sleep( 0.1 )

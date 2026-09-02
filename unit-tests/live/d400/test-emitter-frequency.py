@@ -1,5 +1,5 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
 #test:device:jetson D457
 #test:device:!jetson D455
@@ -8,8 +8,7 @@ import pyrealsense2 as rs
 import pyrsutils as rsutils
 from rspy import test, log, repo
 
-ctx = rs.context()
-device = test.find_first_device_or_exit();
+device, _ = test.find_first_device_or_exit();
 depth_sensor = device.first_depth_sensor()
 
 fw_version = rsutils.version( device.get_info( rs.camera_info.firmware_version ))

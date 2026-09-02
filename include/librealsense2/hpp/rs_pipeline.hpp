@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #ifndef LIBREALSENSE_RS2_PIPELINE_HPP
 #define LIBREALSENSE_RS2_PIPELINE_HPP
@@ -490,6 +490,18 @@ namespace rs2
             rs2_error* e = nullptr;
             rs2_pipeline_stop(_pipeline.get(), &e);
             error::handle(e);
+        }
+
+        /**
+         * Set the device to be used in the pipline.
+         * The function is used to assign the device, useful when the user wish to set controls that cannot be set while streaming. 
+         * \param[in] device  the device to be used in the pipline. 
+         */
+        void set_device( rs2::device* device )
+        { 
+            rs2_error * e = nullptr;
+            rs2_pipeline_set_device( _pipeline.get(), device->get().get(), &e );
+            error::handle( e );
         }
 
         /**

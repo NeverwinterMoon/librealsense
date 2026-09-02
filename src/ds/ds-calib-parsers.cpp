@@ -1,11 +1,11 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
 #include "ds-calib-parsers.h"
 #include "ds-private.h"
 
 #include "ds/d400/d400-private.h"
-#include "l500/l500-private.h"
+#include "ds/d500/d500-private.h"
 
 namespace librealsense
 {
@@ -15,10 +15,7 @@ namespace librealsense
         _hw_monitor(hw_monitor), _pid(pid)
     {
         _imu_eeprom_raw = [this]() {
-            if (_pid == L515_PID)
-                return get_imu_eeprom_raw_l515();
-            else
-                return get_imu_eeprom_raw();
+            return get_imu_eeprom_raw();
         };
 
         _calib_parser = [this]() {
@@ -26,8 +23,6 @@ namespace librealsense
             std::vector<uint8_t> raw(tm1_eeprom_size);
             uint16_t calib_id = dm_v2_eeprom_id; //assume DM V2 IMU as default platform
             bool valid = false;
-
-            if (_pid == L515_PID) calib_id = l500_eeprom_id;
 
             try
             {
@@ -64,14 +59,6 @@ namespace librealsense
         const int offset = 0;
         const int size = eeprom_imu_table_size;
         command cmd(MMER, offset, size);
-        return _hw_monitor->send(cmd);
-    }
-
-    std::vector<uint8_t> mm_calib_handler::get_imu_eeprom_raw_l515() const
-    {
-        // read imu calibration table on L515
-        // READ_TABLE 0x243 0
-        command cmd(ivcam2::READ_TABLE, ivcam2::L515_IMU_TABLE, 0);
         return _hw_monitor->send(cmd);
     }
 
@@ -166,7 +153,7 @@ namespace librealsense
         // predefined platform specific extrinsic, IMU assembly transformation based on mechanical drawing (meters)
         rs2_extrinsics _def_extr;
 
-        if (_pid == ds::RS435I_PID)
+        if (_pid == ds::RS435I_PID || _pid == ds::RS436_PID)
         {
             // D435i specific - Bosch BMI055
             _def_extr = { { 1, 0, 0, 0, 1, 0, 0, 0, 1 }, { -0.00552f, 0.0051f, 0.01174f} };
@@ -178,12 +165,21 @@ namespace librealsense
             _def_extr = { { 1, 0, 0, 0, 1, 0, 0, 0, 1 },{ -0.03022f, 0.0074f, 0.01602f } };
             _imu_2_depth_rot = { { -1,0,0 },{ 0,1,0 },{ 0,0,-1 } };
         }
-        else if (_pid == ds::RS465_PID)
+        else if( _pid == ds::RS457_PID )
         {
-            // D465 specific - Bosch BMI085
-            // TODO - verify with mechanical drawing
-            _def_extr = { { 1, 0, 0, 0, 1, 0, 0, 0, 1 },{ -0.10125f, -0.00375f, -0.0013f } };
-            _imu_2_depth_rot = { { 1,0,0 },{ 0,1,0 },{ 0,0,1 } };
+            _def_extr = { { 1, 0, 0, 0, 1, 0, 0, 0, 1 },{ -0.09530f, -0.00056f, 0.01740f } };
+            _imu_2_depth_rot = { { -1,0,0 },{ 0,1,0 },{ 0,0,-1 } };
+        }
+        else if( _pid == ds::D555_PID )
+        {
+            _def_extr = { { 1, 0, 0, 0, 1, 0, 0, 0, 1 },{ -0.0374f, 0.00719f, 0.0223f } };
+            _imu_2_depth_rot = { { -1,0,0 },{ 0,1,0 },{ 0,0,-1 } };
+        }
+        else if ( _pid == ds::D585_PID || _pid == ds::D585S_PID )
+        {
+            // D585/D585S specific - Bosch BMI085
+            _def_extr = { { 1, 0, 0, 0, 1, 0, 0, 0, 1 },{ -0.0195f, 0.0f, -0.0114f } };
+            _imu_2_depth_rot = { { -1,0,0 },{ 0,-1,0 },{ 0,0,1 } };
         }
         else // unmapped configurations
         {
@@ -203,7 +199,7 @@ namespace librealsense
         if (_valid_extrinsic)
         {
             // extrinsic from calibration table, by user custom calibration, The extrinsic is stored as array of floats / little-endian
-            librealsense::copy(&_extr, &_calib_table.module_info.dm_v2_calib_table.depth_to_imu, sizeof(rs2_extrinsics));
+            std::memcpy( &_extr, &_calib_table.module_info.dm_v2_calib_table.depth_to_imu, sizeof( rs2_extrinsics ) );
         }
         else
         {
@@ -314,7 +310,7 @@ namespace librealsense
         if (_valid_extrinsic)
         {
             // only in case valid extrinsic is available in calibration data by calibration script in future or user custom calibration
-            librealsense::copy(&_extr, &imu_calib_table.depth_to_imu, sizeof(rs2_extrinsics));
+            std::memcpy( &_extr, &imu_calib_table.depth_to_imu, sizeof( rs2_extrinsics ) );
         }
         else
         {

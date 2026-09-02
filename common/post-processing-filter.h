@@ -1,11 +1,12 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2019 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
 #include <librealsense2/rs.hpp>
 #include <model-views.h>
 #include <viewer.h>
+#include <rsutils/easylogging/easyloggingpp.h>
 
 
 /*

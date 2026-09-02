@@ -1,11 +1,12 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
 #include "ds-device-common.h"
 
 #include "fw-update/fw-update-device-interface.h"
 
 #include "d400/d400-device.h"
+#include "d500/d500-device.h"
 
 #include "proc/hdr-merge.h"
 #include "proc/sequence-id-filter.h"
@@ -16,6 +17,9 @@
 #include "proc/spatial-filter.h"
 #include "proc/colorizer.h"
 #include "proc/temporal-filter.h"
+
+#include <src/backend.h>
+#include <librealsense2/h/rs_internal.h>
 
 namespace librealsense
 {
@@ -57,7 +61,7 @@ namespace librealsense
         return roi;
     }
 
-    void ds_device_common::enter_update_state() const
+    void ds_device_common::enter_update_state(const command& cmd) const
     {
         // Stop all data streaming/exchange pipes with HW
         _owner->stop_activity();
@@ -68,9 +72,6 @@ namespace librealsense
         try
         {
             LOG_INFO("entering to update state, device disconnect is expected");
-            command cmd(ds::DFU);
-            cmd.param1 = 1;
-            cmd.require_response = false;
             _hw_monitor->send(cmd);
 
             // We allow 6 seconds because on Linux the removal status is updated at a 5 seconds rate.
@@ -102,27 +103,22 @@ namespace librealsense
         }
     }
 
-    uvc_sensor& ds_device_common::get_raw_depth_sensor()
+    std::shared_ptr< uvc_sensor > ds_device_common::get_raw_depth_sensor()
     {
-        if (auto dev = dynamic_cast<d400_device*>(_owner))
+        if( auto dev = dynamic_cast< d400_device * >( _owner ) )
             return dev->get_raw_depth_sensor();
-        throw std::runtime_error("device not referenced in the product line");
+        if( auto dev = dynamic_cast< d500_device * >( _owner ) )
+            return dev->get_raw_depth_sensor();
+        throw std::runtime_error( "device not referenced in the product line" );
     }
 
-    bool ds_device_common::is_locked(uint8_t gvd_cmd, uint32_t offset)
+    bool ds_device_common::is_locked( const uint8_t * gvd_buff, uint32_t offset )
     {
-        _is_locked = _hw_monitor->is_camera_locked(gvd_cmd, offset);
+        std::memcpy( &_is_locked, gvd_buff + offset, 1 );
         return _is_locked;
     }
 
-    void ds_device_common::get_fw_details( const std::vector<uint8_t> &gvd_buff, std::string& optic_serial, std::string& asic_serial, std::string& fwv ) const
-    {
-        optic_serial = _hw_monitor->get_module_serial_string(gvd_buff, module_serial_offset);
-        asic_serial = _hw_monitor->get_module_serial_string(gvd_buff, module_asic_serial_offset);
-        fwv = _hw_monitor->get_firmware_version_string(gvd_buff, camera_fw_version_offset);
-    }
-
-    std::vector<uint8_t> ds_device_common::backup_flash(update_progress_callback_ptr callback)
+    std::vector<uint8_t> ds_device_common::backup_flash( rs2_update_progress_callback_sptr callback )
     {
         int flash_size = 1024 * 2048;
         int max_bulk_size = 1016;
@@ -132,8 +128,8 @@ namespace librealsense
         flash.reserve(flash_size);
 
         LOG_DEBUG("Flash backup started...");
-        uvc_sensor& raw_depth_sensor = get_raw_depth_sensor();
-        raw_depth_sensor.invoke_powered([&](platform::uvc_device& dev)
+        std::shared_ptr< uvc_sensor > raw_depth_sensor = get_raw_depth_sensor();
+        raw_depth_sensor->invoke_powered([&](platform::uvc_device& dev)
             {
                 for (int i = 0; i < max_iterations; i++)
                 {
@@ -162,7 +158,7 @@ namespace librealsense
                         }
                         catch (...)
                         {
-                            if (i < retries - 1) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                            if (j < retries - 1) std::this_thread::sleep_for(std::chrono::milliseconds(100));
                             else throw;
                         }
                     }
@@ -175,7 +171,7 @@ namespace librealsense
         return flash;
     }
 
-    void update_flash_section(std::shared_ptr<hw_monitor> hwm, const std::vector<uint8_t>& image, uint32_t offset, uint32_t size, update_progress_callback_ptr callback, float continue_from, float ratio)
+    void update_flash_section(std::shared_ptr<hw_monitor> hwm, const std::vector<uint8_t>& image, uint32_t offset, uint32_t size, rs2_update_progress_callback_sptr callback, float continue_from, float ratio, bool is_mipi)
     {
         size_t sector_count = size / ds::FLASH_SECTOR_SIZE;
         size_t first_sector = offset / ds::FLASH_SECTOR_SIZE;
@@ -196,19 +192,49 @@ namespace librealsense
             cmdFES.param2 = 1;
             auto res = hwm->send(cmdFES);
 
+            int max_transfer_size_per_packet = (int)HW_MONITOR_COMMAND_SIZE;
+
+            // This is a WORKAROUND to support MIPI camera D457.
+            // If the packet size is more than 128 bytes, FLASH_WRITE is not working as expected.
+            // Remove this line after fixing the issue.
+            if (is_mipi) max_transfer_size_per_packet = 128;
+
             for (int i = 0; i < ds::FLASH_SECTOR_SIZE; )
             {
                 auto index = sector_index * ds::FLASH_SECTOR_SIZE + i;
                 if (index >= offset + size)
                     break;
-                int packet_size = std::min((int)(HW_MONITOR_COMMAND_SIZE - (i % HW_MONITOR_COMMAND_SIZE)), (int)(ds::FLASH_SECTOR_SIZE - i));
+                int packet_size = std::min((int)(max_transfer_size_per_packet - (i % max_transfer_size_per_packet)), (int)(ds::FLASH_SECTOR_SIZE - i));
+
                 command cmdFWB(ds::FWB);
                 cmdFWB.require_response = true;
                 cmdFWB.param1 = (int)index;
                 cmdFWB.param2 = packet_size;
                 cmdFWB.data.assign(image.data() + index, image.data() + index + packet_size);
-                res = hwm->send(cmdFWB);
-                i += packet_size;
+                int retries = 0;
+                bool fwb_succeeded = false;
+                while (!fwb_succeeded && retries < 3)
+                {
+                    try
+                    {
+                        res = hwm->send(cmdFWB);
+                        fwb_succeeded = true;
+                        i += packet_size;
+                    }
+                    catch (const std::exception& e)
+                    {
+                        LOG_DEBUG("FWB command failed during section flash retry, retry number: " << retries << " ,error: " << e.what());
+                        retries++;
+                        if (retries == 3)
+                        {
+                            LOG_ERROR("FWB command failed 3 times during section flash!");
+                            throw;
+                        }
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+                }
+
+
             }
 
             if (callback)
@@ -217,7 +243,7 @@ namespace librealsense
     }
 
     void update_section(std::shared_ptr<hw_monitor> hwm, const std::vector<uint8_t>& merged_image, flash_section fs, uint32_t tables_size,
-        update_progress_callback_ptr callback, float continue_from, float ratio)
+        rs2_update_progress_callback_sptr callback, float continue_from, float ratio, bool is_mipi)
     {
         auto first_table_offset = fs.tables.front().offset;
         float total_size = float(fs.app_size + tables_size);
@@ -225,11 +251,11 @@ namespace librealsense
         float app_ratio = fs.app_size / total_size * ratio;
         float tables_ratio = tables_size / total_size * ratio;
 
-        update_flash_section(hwm, merged_image, fs.offset, fs.app_size, callback, continue_from, app_ratio);
-        update_flash_section(hwm, merged_image, first_table_offset, tables_size, callback, app_ratio, tables_ratio);
+        update_flash_section(hwm, merged_image, fs.offset, fs.app_size, callback, continue_from, app_ratio, is_mipi);
+        update_flash_section(hwm, merged_image, first_table_offset, tables_size, callback, app_ratio, tables_ratio, is_mipi);
     }
 
-    void update_flash_internal(std::shared_ptr<hw_monitor> hwm, const std::vector<uint8_t>& image, std::vector<uint8_t>& flash_backup, update_progress_callback_ptr callback, int update_mode)
+    void update_flash_internal(std::shared_ptr<hw_monitor> hwm, const std::vector<uint8_t>& image, std::vector<uint8_t>& flash_backup, rs2_update_progress_callback_sptr callback, int update_mode, bool is_mipi)
     {
         auto flash_image_info = ds::get_flash_info(image);
         auto flash_backup_info = ds::get_flash_info(flash_backup);
@@ -238,24 +264,33 @@ namespace librealsense
         // update read-write section
         auto first_table_offset = flash_image_info.read_write_section.tables.front().offset;
         auto tables_size = flash_image_info.header.read_write_start_address + flash_image_info.header.read_write_size - first_table_offset;
-        update_section(hwm, merged_image, flash_image_info.read_write_section, tables_size, callback, 0, update_mode == RS2_UNSIGNED_UPDATE_MODE_READ_ONLY ? 0.5f : 1.0f);
+        update_section(hwm, merged_image, flash_image_info.read_write_section, tables_size, callback, 0, update_mode == RS2_UNSIGNED_UPDATE_MODE_READ_ONLY ? 0.5f : 1.0f, is_mipi);
 
         if (update_mode == RS2_UNSIGNED_UPDATE_MODE_READ_ONLY)
         {
             // update read-only section
             auto first_table_offset = flash_image_info.read_only_section.tables.front().offset;
             auto tables_size = flash_image_info.header.read_only_start_address + flash_image_info.header.read_only_size - first_table_offset;
-            update_section(hwm, merged_image, flash_image_info.read_only_section, tables_size, callback, 0.5, 0.5);
+            update_section(hwm, merged_image, flash_image_info.read_only_section, tables_size, callback, 0.5, 0.5, is_mipi);
         }
     }
 
-    void ds_device_common::update_flash(const std::vector<uint8_t>& image, update_progress_callback_ptr callback, int update_mode)
+    void ds_device_common::update_flash(const std::vector<uint8_t>& image, rs2_update_progress_callback_sptr callback, int update_mode)
     {
+        // check if the given FW size matches the expected FW size
+        if( image.size() != unsigned_fw_size )
+        {
+            throw librealsense::invalid_value_exception( rsutils::string::from()
+                << "Unsupported firmware binary image (unsigned) provided - "
+                << image.size() << " bytes" );
+        }
+
+
         if (_is_locked)
             throw std::runtime_error("this camera is locked and doesn't allow direct flash write, for firmware update use rs2_update_firmware method (DFU)");
 
-        auto& raw_depth_sensor = get_raw_depth_sensor();
-        raw_depth_sensor.invoke_powered([&](platform::uvc_device& dev)
+        auto raw_depth_sensor = get_raw_depth_sensor();
+        raw_depth_sensor->invoke_powered([&](platform::uvc_device& dev)
             {
                 command cmdPFD(ds::PFD);
                 cmdPFD.require_response = false;
@@ -264,13 +299,13 @@ namespace librealsense
                 switch (update_mode)
                 {
                 case RS2_UNSIGNED_UPDATE_MODE_FULL:
-                    update_flash_section(_hw_monitor, image, 0, ds::FLASH_SIZE, callback, 0, 1.0);
+                    update_flash_section(_hw_monitor, image, 0, ds::FLASH_SIZE, callback, 0, 1.0, _is_mipi);
                     break;
                 case RS2_UNSIGNED_UPDATE_MODE_UPDATE:
                 case RS2_UNSIGNED_UPDATE_MODE_READ_ONLY:
                 {
                     auto flash_backup = backup_flash(nullptr);
-                    update_flash_internal(_hw_monitor, image, flash_backup, callback, update_mode);
+                    update_flash_internal(_hw_monitor, image, flash_backup, callback, update_mode, _is_mipi);
                     break;
                 }
                 default:
@@ -296,12 +331,19 @@ namespace librealsense
         return (0 != ret.front());
     }
 
-    notification ds_notification_decoder::decode(int value)
+    ds_notification_decoder::ds_notification_decoder( const std::map< int, std::string > & descriptions )
+        : _descriptions( descriptions )
     {
-        if (ds::ds_fw_error_report.find(static_cast<uint8_t>(value)) != ds::ds_fw_error_report.end())
-            return{ RS2_NOTIFICATION_CATEGORY_HARDWARE_ERROR, value, RS2_LOG_SEVERITY_ERROR, ds::ds_fw_error_report.at(static_cast<uint8_t>(value)) };
+    }
+            
+    notification ds_notification_decoder::decode( int value )
+    {
+        auto iter = _descriptions.find( static_cast< uint8_t >( value ) );
+        if( iter != _descriptions.end() )
+            return { RS2_NOTIFICATION_CATEGORY_HARDWARE_ERROR, value, RS2_LOG_SEVERITY_ERROR, iter->second };
 
-        return{ RS2_NOTIFICATION_CATEGORY_HARDWARE_ERROR, value, RS2_LOG_SEVERITY_WARN, (rsutils::string::from() << "D400 HW report - unresolved type " << value) };
+        return { RS2_NOTIFICATION_CATEGORY_HARDWARE_ERROR, value, RS2_LOG_SEVERITY_WARN,
+                 ( rsutils::string::from() << "HW report - unresolved type " << value ) };
     }
 
     processing_blocks get_ds_depth_recommended_proccesing_blocks()

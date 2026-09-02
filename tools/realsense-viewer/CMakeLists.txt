@@ -1,7 +1,6 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2019 Intel Corporation. All Rights Reserved.
-#  minimum required cmake version: 3.1.0
-cmake_minimum_required(VERSION 3.1.0)
+# Copyright(c) 2019-2024 RealSense, Inc. All Rights Reserved.
+cmake_minimum_required(VERSION 3.10)
 
 project(realsense-viewer)
 
@@ -16,19 +15,13 @@ find_package(Threads REQUIRED)
 
 include_directories(${CMAKE_BINARY_DIR})
 
-using_easyloggingpp( ${PROJECT_NAME} SHARED )
-
 include(../../common/CMakeLists.txt)
 
 if(BUILD_GRAPHICAL_EXAMPLES)
     set(RS_VIEWER_CPP
     ${COMMON_SRC}
     realsense-viewer.cpp
-    ../../third-party/imgui/imgui.cpp
-    ../../third-party/imgui/imgui_draw.cpp
-    ../../third-party/imgui/imgui_impl_glfw.cpp
-    ../../third-party/imgui/imgui-fonts-karla.hpp
-    ../../third-party/imgui/imgui-fonts-fontawesome.hpp
+    ${IMGUI_SOURCES}
     ../../common/realsense-ui-advanced-mode.h
     ../../common/rendering.h
     ../../common/model-views.h
@@ -52,6 +45,14 @@ if(BUILD_GRAPHICAL_EXAMPLES)
     ../../common/rs-config.cpp
     ../../common/os.h
     ../../common/os.cpp
+    ../../common/graph-model.h
+    ../../common/graph-model.cpp
+    ../../third-party/rsutils/include/rsutils/type/eth-config.h
+    ../../third-party/implot/implot.cpp
+    ../../third-party/implot/implot.h
+    ../../third-party/implot/implot_internal.h
+    ../../third-party/implot/implot_items.cpp
+
 )
 
 SET(DELAYED
@@ -118,8 +119,6 @@ if(DEFINED INTEL_OPENVINO_DIR  AND  IS_DIRECTORY ${INTEL_OPENVINO_DIR})
         ../../wrappers/openvino/rs-vino/base-detection.h
         ../../wrappers/openvino/rs-vino/object-detection.cpp
         ../../wrappers/openvino/rs-vino/object-detection.h
-        ../../wrappers/openvino/rs-vino/age-gender-detection.cpp
-        ../../wrappers/openvino/rs-vino/age-gender-detection.h
         ../../wrappers/openvino/rs-vino/detected-object.cpp
         ../../wrappers/openvino/rs-vino/detected-object.h
         ../../wrappers/openvino/rs-vino/openvino-helpers.h
@@ -143,15 +142,11 @@ if(DEFINED INTEL_OPENVINO_DIR  AND  IS_DIRECTORY ${INTEL_OPENVINO_DIR})
     dl_vino_model( "README.txt"                              "789e144d6cafa379c8437d2a6860829b6d935a8d" )
     dl_vino_model( "face-detection-adas-0001.bin"            "1625f05ada1d8e78e36856def7124f78cd0a6c2a" )
     dl_vino_model( "face-detection-adas-0001.xml"            "11c36f6e4488b2f5437ccff9f330d02545087ab3" )
-    dl_vino_model( "age-gender-recognition-retail-0013.bin"  "206f6e97e53cd600fcac7d31e1c56accbbe461b9" )
-    dl_vino_model( "age-gender-recognition-retail-0013.xml"  "2654d7f1638d575b8d1886f8128deae2ea79ee55" )
     else()
     # Newer model files with IRv10, 2020.1 and later
     dl_vino_model( "README.txt"                              "789e144d6cafa379c8437d2a6860829b6d935a8d" )
     dl_vino_model( "face-detection-adas-0001.bin"  "065e9015297c7adbc650ebfc17176477cd0a4279" )
     dl_vino_model( "face-detection-adas-0001.xml"  "331be642a248213f586ec1d1b71c223435a437e3" )
-    dl_vino_model( "age-gender-recognition-retail-0013.bin"  "206f6e97e53cd600fcac7d31e1c56accbbe461b9" )
-    dl_vino_model( "age-gender-recognition-retail-0013.xml"  "36bde5d4d42d29515abe871f69097ffcf4ff6414" )
     endif()
 
     list(APPEND DELAYED
@@ -169,19 +164,16 @@ if(DEFINED INTEL_OPENVINO_DIR  AND  IS_DIRECTORY ${INTEL_OPENVINO_DIR})
 endif()
 
 # config-ui
+target_sources( ${PROJECT_NAME} PRIVATE ${RS_VIEWER_CPP} viewer-main.cpp )
 if(WIN32)
-    target_sources( ${PROJECT_NAME} PRIVATE
-        ${RS_VIEWER_CPP}
-        ${CMAKE_CURRENT_SOURCE_DIR}/res/resource.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/res/realsense-viewer.rc
-        ../../common/windows-app-bootstrap.cpp
-        )
+    target_sources( ${PROJECT_NAME} PRIVATE ../../common/windows-app-bootstrap.cpp )
 
     source_group("3rd Party" FILES
         ../../third-party/tinyfiledialogs/tinyfiledialogs.c
         ../../third-party/tinyfiledialogs/tinyfiledialogs.h
         ../../third-party/imgui/imgui.cpp
         ../../third-party/imgui/imgui_draw.cpp
+        ../../third-party/imgui/imgui_impl_opengl3.cpp
         ../../third-party/imgui/imgui_impl_glfw.cpp
         ../../third-party/imgui/imgui-fonts-karla.hpp
         ../../third-party/imgui/imgui-fonts-fontawesome.hpp
@@ -189,20 +181,23 @@ if(WIN32)
 
     source_group("Resources" FILES
         ${CMAKE_CURRENT_SOURCE_DIR}/res/resource.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/res/realsense-viewer.rc)
+        ${CMAKE_CURRENT_SOURCE_DIR}/res/realsense-app.rc)
 
     source_group("OpenVINO" FILES ${OPENVINO_FILES})
 
     #list(TRANSFORM DELAYED PREPEND " /DELAYLOAD:")  - Requires cmake v3.12
     PREPEND(DELAYED " /DELAYLOAD:" ${DELAYED})
     string(REPLACE ";" " " LD_FLAGS_STR "${DELAYED}")
-    set_target_properties(realsense-viewer PROPERTIES LINK_FLAGS "${LD_FLAGS_STR}")
-
-else()
-    target_sources( ${PROJECT_NAME} PRIVATE
-        ${RS_VIEWER_CPP}
-    )
 endif()
+
+if(BUILD_ROSBAG2)
+    target_compile_definitions(realsense-viewer PRIVATE BUILD_ROSBAG2)
+endif()
+
+set(RS_VIEWER_LIBS ${GTK3_LIBRARIES} Threads::Threads realsense2-gl)
+
+include(../tools_common.cmake)
+tools_target_config(${PROJECT_NAME})
 
 if(OPENVINO2019)
     target_compile_definitions(realsense-viewer PRIVATE OPENVINO2019)
@@ -220,35 +215,13 @@ include_directories(
     ../../third-party/tinyfiledialogs
     ${GLFW_SOURCE_DIR}/include
     ../../third-party/imgui
+    ../../third-party/implot
     ../../third-party/glad
     )
 
 
-set_property(TARGET realsense-viewer PROPERTY CXX_STANDARD 11)
-
-set(RS_VIEWER_LIBS ${GTK3_LIBRARIES} Threads::Threads realsense2-gl)
-
-if (CHECK_FOR_UPDATES)
-    message( STATUS "Check for updates capability added to realsense-viewer" )
-    add_dependencies(realsense-viewer libcurl)
-    set(RS_VIEWER_LIBS ${RS_VIEWER_LIBS} curl)
-endif()
-
-if (IMPORT_DEPTH_CAM_FW)
-    add_definitions(-DINTERNAL_FW)
-    target_link_libraries(realsense-viewer fw)
-endif()
-
-target_link_libraries(realsense-viewer ${DEPENDENCIES} ${RS_VIEWER_LIBS})
-
-set_target_properties (realsense-viewer PROPERTIES
-    FOLDER Tools
-)
-
-target_include_directories(realsense-viewer PRIVATE ../../src)
-
 install(
-    TARGETS realsense-viewer
+    TARGETS ${PROJECT_NAME}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 #https://cmake.org/cmake/help/latest/command/install.html
@@ -256,4 +229,8 @@ install(DIRECTORY presets/
     DESTINATION $ENV{HOME}/Documents/librealsense2/presets
     FILES_MATCHING PATTERN "*.preset"
 )
+
+if(BUILD_VIEWER_TESTS)
+    include(tests/viewer_tests.cmake)
+endif()
 endif()

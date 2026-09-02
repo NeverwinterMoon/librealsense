@@ -55,12 +55,12 @@ macro(global_set_flags)
         add_definitions(-DRS2_USE_CUDA)
     endif()
 
-    if (BUILD_SHARED_LIBS)
-        add_definitions(-DBUILD_SHARED_LIBS)
+    if (BUILD_WITH_NEON)
+        add_definitions(-DBUILD_WITH_NEON)
     endif()
 
-    if (BUILD_INTERNAL_UNIT_TESTS)
-        add_definitions(-DBUILD_INTERNAL_UNIT_TESTS)
+    if (BUILD_SHARED_LIBS)
+        add_definitions(-DBUILD_SHARED_LIBS)
     endif()
 
     if (BUILD_WITH_CUDA)
@@ -84,7 +84,7 @@ macro(global_set_flags)
             add_definitions(-DCHECK_FOR_UPDATES)
         endif()
     endif()
-    
+        
     add_definitions(-D${BACKEND} -DUNICODE)
 endmacro()
 
@@ -96,16 +96,12 @@ macro(global_target_config)
     target_include_directories(${LRS_TARGET}
         PRIVATE
             src
-            ${ROSBAG_HEADER_DIRS}
-            ${BOOST_INCLUDE_PATH}
-            ${LZ4_INCLUDE_PATH}
             ${LIBUSB_LOCAL_INCLUDE_PATH}
         PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<INSTALL_INTERFACE:include>
             PRIVATE ${USB_INCLUDE_DIRS}
     )
-
 
 
 endmacro()

@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 #include <rsutils/concurrency/concurrency.h>
 #include <rsutils/easylogging/easyloggingpp.h>
@@ -89,7 +89,6 @@ void dispatcher::stop()
     {
         std::lock_guard< std::mutex > lock(_dispatch_mutex);
         assert(_queue.empty());
-
     }
     // Signal we've stopped so any sleeping dispatched will wake up immediately
     {

@@ -6,6 +6,7 @@ Librealsense Post-Processing Filters
   * [Spatial Edge-Preserving filter](#spatial-filter)
   * [Temporal filter](#temporal-filter)
   * [Holes Filling filter](#hole-filling-filter)
+  * [Rotation filter](#rotation-filter)
 * [Design and Implementation](#post-processing-implementation)
   * [Using Filters in application code](#post-processing-api-usage)
 
@@ -70,6 +71,17 @@ Controls | Operation |  Range | Default
 :------: | :-------- | :---- | :----:
 Hole Filling| Control the data that will be used to fill the invalid pixels | [0-2] enumerated:<br/>__*fill_from_left*__ - Use the value from the left neighbor pixel to fill the hole<br/>__*farest_from_around*__ - Use the value from the neighboring pixel which is furthest away from the sensor<br/>__*nearest_from_around*__ - - Use the value from the neighboring pixel closest to the sensor| 1 (Farest from around)
 
+### Rotation filter
+
+The rotation filter transforms depth and IR frames by rotating them by specified angles: 0°, 90°, 180°, and -90°.
+This allows re-orienting frames to fit the required perspective for various applications.
+
+After the resulted frame is produced, the frame intrinsic parameters are recalculated to account for rotation.
+
+Controls | Operation |  Range | Default
+:------: | :-------- | :---- | :----:
+Rotation| The frame rotation in degrees | Discrete steps: 0, 90, 180, -90| 0° 
+
 ## Design and Implementation
 Post-processing modules are encapsulated into self-contained processing blocks, that provide for the following key requirements:
 1. Synchronous/Asynchronous invocation
@@ -84,8 +96,7 @@ The filters preserve the original data and always generate a new (filtered) fram
 
 All filters support discreet as well as floating point input data formats.
 The floating point inputs are utilized by D400 stereo-based Depth cameras that support Disparity data representation.
-The discreet version of the filters is primarily used with SR300 camera, but also
-can be applied to D400 devices (though not recommended)
+The discreet version of the filters can be applied to D400 devices, though this is not recommended.
 
 
 ## Using Filters in application code
@@ -97,9 +108,9 @@ At the same time the recommended scheme used in librealsense tools and demos is 
 Note that even though the filter order in the demos is predefined, each filter is controlled individually and can be toggled on/off at run-time.
 
 Demos and tools that have the post-processing code blocks embedded:
-1. [RealSense-Viewer](https://github.com/IntelRealSense/librealsense/tree/master/tools/realsense-viewer)
-2. [Depth Quality Tool](https://github.com/IntelRealSense/librealsense/tree/master/tools/depth-quality)
-2. [Post-Processing Demo](https://github.com/IntelRealSense/librealsense/tree/master/examples/post-processing)
+1. [RealSense-Viewer](https://github.com/realsenseai/librealsense/tree/master/tools/realsense-viewer)
+2. [Depth Quality Tool](https://github.com/realsenseai/librealsense/tree/master/tools/depth-quality)
+2. [Post-Processing Demo](https://github.com/realsenseai/librealsense/tree/master/examples/post-processing)
 
 Filter initialization and activation flows:
 Using `C` API calls:

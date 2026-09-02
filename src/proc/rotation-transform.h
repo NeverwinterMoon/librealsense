@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2019 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -16,7 +16,7 @@ namespace librealsense
 
     protected:
         void init_profiles_info(const rs2::frame* f) override;
-        void process_function(byte * const dest[], const byte * source, int width, int height, int actual_size, int input_size) override;
+        void process_function( uint8_t * const dest[], const uint8_t * source, int width, int height, int actual_size, int input_size) override;
     };
 
     class confidence_rotation_transform : public rotation_transform
@@ -26,6 +26,6 @@ namespace librealsense
 
     protected:
         confidence_rotation_transform(const char* name);
-        void process_function(byte * const dest[], const byte * source, int width, int height, int actual_size, int input_size) override;
+        void process_function( uint8_t * const dest[], const uint8_t * source, int width, int height, int actual_size, int input_size) override;
     };
 }

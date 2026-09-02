@@ -1,8 +1,8 @@
 # Unity Wrapper for RealSense SDK 2.0
 
-<p align="center"><img src="https://librealsense.intel.com/rs-tests/unity_screenshot.PNG" height="400"/></p>
+<p align="center"><img src="https://librealsense.realsenseai.com/rs-tests/unity_screenshot.PNG" height="400"/></p>
 
-> [Download **realsense.unitypackage**](https://github.com/IntelRealSense/librealsense/releases) and go to `Assets > Scenes > Start Here` to see the home screen above
+> [Download **realsense.unitypackage**](https://github.com/realsenseai/librealsense/releases) and go to `Assets > Scenes > Start Here` to see the home screen above
 
 ## Overview
 
@@ -88,7 +88,7 @@ Once the device is streaming, Unity Inspector will show the device's sensors and
 
 ##### Texture Streams
 
-Under the `RsDeivce` object in Unity's Hierarchy view, you can find a number of textures that are binded to a 'RsFrameProvider' (RsDevice or RsProcessingPipe) frame callbacks and allow a texture to be updated upon frame arrival.
+Under the `RsDevice` object in Unity's Hierarchy view, you can find a number of textures that are binded to a 'RsFrameProvider' (RsDevice or RsProcessingPipe) frame callbacks and allow a texture to be updated upon frame arrival.
 Each texture stream is associated with the `RealSenseStreamTexture` script which allows user to bind their textures so that they will be updated with each new frame. The following screenshot displays the configurations available for users when using a texture stream:
 
 ![textures](https://user-images.githubusercontent.com/18511514/55073767-3de1c200-5097-11e9-9f6e-60df2cd036ba.PNG)

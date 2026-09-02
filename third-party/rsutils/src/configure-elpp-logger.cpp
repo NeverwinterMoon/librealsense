@@ -1,10 +1,14 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
 #ifdef BUILD_EASYLOGGINGPP
 #include <rsutils/easylogging/easyloggingpp.h>
 
+
 namespace rsutils {
+
+
+std::string const g_librealsense_elpp_id( LIBREALSENSE_ELPP_ID );
 
 
 void configure_elpp_logger( bool enable_debug, std::string const & nested_indent, std::string const & logger_id )

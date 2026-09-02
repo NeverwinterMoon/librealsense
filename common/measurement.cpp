@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2020 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2020 RealSense, Inc. All Rights Reserved.
 
 #include "measurement.h"
 #include "ux-window.h"
@@ -77,7 +77,8 @@ std::vector<int> measurement_state::find_path(int from, int to)
 
 void measurement::add_point(interest_point p)
 {
-    auto shift = ImGui::IsKeyDown(GLFW_KEY_LEFT_SHIFT) || ImGui::IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
+    ImGuiIO& io = ImGui::GetIO();
+    auto shift = io.KeysDown[GLFW_KEY_LEFT_SHIFT] || io.KeysDown[GLFW_KEY_RIGHT_SHIFT];
 
     if (is_enabled())
     {
@@ -184,7 +185,7 @@ float measurement::calculate_area(std::vector<float3> poly)
     auto a = poly[1] - poly[0];
     auto b = poly[2] - poly[0];
     auto n = cross(a, b);
-    return abs(total * n.normalize()) / 2;
+    return std::abs( total * n.normalized() ) / 2;
 }
 
 void draw_sphere(const float3& pos, float r, int lats, int longs)
@@ -334,7 +335,7 @@ void measurement::update_input(ux_window& win, const rs2::rect& viewer_rect)
 {
     id = 0;
 
-    if (ImGui::IsKeyPressed('Z') || ImGui::IsKeyPressed('z'))
+    if (ImGui::IsKeyPressed(ImGuiKey_Z))
         restore_state();
 
     input_ctrl.prev_mouse_down = input_ctrl.mouse_down;
@@ -430,7 +431,8 @@ void measurement::restore_state()
 
 void measurement::draw(ux_window& win)
 {
-    auto shift = ImGui::IsKeyDown(GLFW_KEY_LEFT_SHIFT) || ImGui::IsKeyDown(GLFW_KEY_RIGHT_SHIFT);
+    ImGuiIO& io = ImGui::GetIO();
+    auto shift = io.KeysDown[GLFW_KEY_LEFT_SHIFT] || io.KeysDown[GLFW_KEY_RIGHT_SHIFT];
 
     auto p_idx = point_hovered(win);
     if (p_idx >= 0 && !win.get_mouse().mouse_down[0])
@@ -461,10 +463,10 @@ void measurement::draw(ux_window& win)
 
         auto axis1 = cross(vec3d{ _normal.x, _normal.y, _normal.z }, vec3d{ 0.f, 1.f, 0.f });
         auto faxis1 = float3 { axis1.x, axis1.y, axis1.z };
-        faxis1.normalize();
+        faxis1.normalized();
         auto axis2 = cross(vec3d{ _normal.x, _normal.y, _normal.z }, axis1);
         auto faxis2 = float3 { axis2.x, axis2.y, axis2.z };
-        faxis2.normalize();
+        faxis2.normalized();
 
         matrix4 basis = matrix4::identity();
         basis(0, 0) = faxis1.x;
@@ -670,7 +672,7 @@ void measurement::show_tooltip(ux_window& win)
         {
             std::string tt = rsutils::string::from() << std::fixed << std::setprecision(3)
                 << _picked.x << ", " << _picked.y << ", " << _picked.z << " meters";
-            ImGui::SetTooltip("%s", tt.c_str());
+            RsImGui::CustomTooltip("%s", tt.c_str());
         }
     }
 }

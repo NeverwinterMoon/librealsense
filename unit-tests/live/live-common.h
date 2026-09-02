@@ -1,10 +1,11 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 #include <unit-tests/test.h>
 #include <librealsense2/rs.hpp>
 #include <condition_variable>
 #include <src/hw-monitor.h>
+#include <src/firmware-version.h>
 
 using namespace rs2;
 
@@ -24,12 +25,12 @@ inline std::string repr( rs2::device const & self )
         else
             ss << " (FW update id: " << self.get_info( RS2_CAMERA_INFO_FIRMWARE_UPDATE_ID );
         if( self.supports( RS2_CAMERA_INFO_FIRMWARE_VERSION ) )
-            ss << "  FW: " << self.get_info( RS2_CAMERA_INFO_FIRMWARE_VERSION );
+            ss << " FW: " << self.get_info( RS2_CAMERA_INFO_FIRMWARE_VERSION );
         if( self.supports( RS2_CAMERA_INFO_CAMERA_LOCKED )
             && strcmp( "YES", self.get_info( RS2_CAMERA_INFO_CAMERA_LOCKED ) ) )
-            ss << "  UNLOCKED";
+            ss << " UNLOCKED";
         if( self.supports( RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR ) )
-            ss << "  on USB" << self.get_info( RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR );
+            ss << " on USB" << self.get_info( RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR );
         ss << ")";
     }
     ss << ">";
@@ -50,7 +51,7 @@ inline std::string repr( rs2::device_list const & list )
 
 inline rs2::device find_first_device_or_exit()
 {
-    rs2::context ctx;
+    rs2::context ctx( "{\"dds\":false}" );
     rs2::device_list devices_list = ctx.query_devices();
     if( devices_list.size() == 0 )
     {
@@ -64,7 +65,7 @@ inline rs2::device find_first_device_or_exit()
 
 inline rs2::device_list find_devices_by_product_line_or_exit( int product )
 {
-    rs2::context ctx;
+    rs2::context ctx( "{\"dds\":false}" );
     rs2::device_list devices_list = ctx.query_devices( product );
     if( devices_list.size() == 0 )
     {
@@ -94,7 +95,7 @@ inline void exit_if_fw_version_is_under( rs2::device & dev, librealsense::firmwa
 // Can get as input a full device name or short like "L515/D435..."
 inline rs2::device find_first_device_by_name_or_exit( const std::string & dev_name )
 {
-    rs2::context ctx;
+    rs2::context ctx( "{\"dds\":false}" );
     std::vector< rs2::device > devices_list = ctx.query_devices();
 
     auto dev_iter
@@ -204,53 +205,6 @@ inline stream_profile find_confidence_corresponding_to_depth(rs2::depth_sensor d
 
     REQUIRE(confidence_profile != stream_profiles.end());
     return *confidence_profile;
-}
-
-template < class T >
-inline void start_default_l500_depth_profiles( rs2::depth_sensor depth_sens, T callback, bool with_confidence = false )
-{
-    auto depth = find_default_depth_profile( depth_sens );
-    auto ir = find_default_ir_profile( depth_sens );
-
-    if (with_confidence)
-    {
-        auto confidence = find_confidence_corresponding_to_depth( depth_sens, depth );
-        REQUIRE_NOTHROW( depth_sens.open( { depth, ir, confidence } ) );
-    }
-    else
-    {
-        REQUIRE_NOTHROW( depth_sens.open( { depth, ir } ) );
-    }
-
-    REQUIRE_NOTHROW( depth_sens.start( callback ) );
-}
-
-inline stream_profile
-find_profile( rs2::depth_sensor depth_sens, rs2_stream stream, rs2_sensor_mode mode )
-{
-    std::vector< stream_profile > stream_profiles;
-    REQUIRE_NOTHROW( stream_profiles = depth_sens.get_stream_profiles() );
-
-    std::map< rs2_sensor_mode, std::pair< uint32_t, uint32_t > > sensor_mode_to_resolution
-        = { { { RS2_SENSOR_MODE_VGA }, { 640, 480 } },
-            { { RS2_SENSOR_MODE_XGA }, { 1024, 768 } },
-            { { RS2_SENSOR_MODE_QVGA }, { 320, 240 } } };
-
-
-    auto profile
-        = std::find_if( stream_profiles.begin(), stream_profiles.end(), [&]( stream_profile sp ) {
-              auto vp = sp.as< video_stream_profile >();
-              if( vp )
-              {
-                  return sp.stream_type() == stream
-                      && vp.width() == sensor_mode_to_resolution[mode].first
-                      && vp.height() == sensor_mode_to_resolution[mode].second;
-              }
-              return false;
-          } );
-
-    REQUIRE( profile != stream_profiles.end() );
-    return *profile;
 }
 
 inline void do_while_streaming( rs2::sensor depth_sens,

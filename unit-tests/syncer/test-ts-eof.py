@@ -1,5 +1,5 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 import pyrealsense2 as rs
 from rspy import log, test
@@ -13,7 +13,7 @@ sw.init()
 
 import tempfile, os
 temp_dir = tempfile.TemporaryDirectory( prefix = 'recordings_' )
-filename = os.path.join( temp_dir.name, 'rec.bag' )
+filename = os.path.join( temp_dir.name, 'rec.db3' )
 recorder = rs.recorder( filename, sw.device )
 
 sw.start()

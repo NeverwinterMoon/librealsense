@@ -1,8 +1,10 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #include "algo.h"
 #include "option.h"
+#include "core/video-frame.h"
+#include <algorithm>
 
 using namespace librealsense;
 
@@ -79,10 +81,14 @@ auto_exposure_mechanism::auto_exposure_mechanism(option& gain_option, option& ex
 
                 double values[2] = {};
 
-                values[0] = frame->supports_frame_metadata(RS2_FRAME_METADATA_ACTUAL_EXPOSURE) ?
-                            static_cast<double>(frame->get_frame_metadata(RS2_FRAME_METADATA_ACTUAL_EXPOSURE)) : _exposure_option.query();
-                values[1] = frame->supports_frame_metadata(RS2_FRAME_METADATA_GAIN_LEVEL) ?
-                            static_cast<double>(frame->get_frame_metadata(RS2_FRAME_METADATA_GAIN_LEVEL)) : _gain_option.query();
+                rs2_metadata_type actual_exposure_md;
+                values[0] = frame->find_metadata( RS2_FRAME_METADATA_ACTUAL_EXPOSURE, &actual_exposure_md )
+                              ? static_cast< double >( actual_exposure_md )
+                              : _exposure_option.query();
+                rs2_metadata_type gain_level_md;
+                values[1] = frame->find_metadata( RS2_FRAME_METADATA_GAIN_LEVEL, &gain_level_md )
+                              ? static_cast< double >( gain_level_md )
+                              : _gain_option.query();
 
                 values[0] /= 1000.; // Fisheye exposure value by extension control-
                                     // is in units of MicroSeconds, from FW version 5.6.3.0
@@ -219,14 +225,20 @@ void auto_exposure_algorithm::modify_exposure(float& exposure_value, bool& exp_m
 
 bool auto_exposure_algorithm::analyze_image(const frame_interface* image)
 {
-    region_of_interest image_roi = roi;
+    bool roi_initialized;
+    region_of_interest image_roi;
+    {
+        std::lock_guard< std::recursive_mutex > lock( state_mutex );
+        roi_initialized = is_roi_initialized;
+        image_roi = roi;
+    }
     auto number_of_pixels = (image_roi.max_x - image_roi.min_x + 1)*(image_roi.max_y - image_roi.min_y + 1);
     if (number_of_pixels == 0)
         return false;   // empty image
 
     auto frame = ((video_frame*)image);
 
-    if (!is_roi_initialized)
+    if (!roi_initialized)
     {
         auto width = frame->get_width();
         auto height = frame->get_height();
@@ -538,7 +550,7 @@ void auto_exposure_algorithm::histogram_score(std::vector<int>& h, const int tot
         for (int i = 0; i <= 255; ++i)
         {
             m1 += h[i] * i;
-            m2 += h[i] * sqr(i);
+            m2 += static_cast< int64_t >( h[i] ) * sqr( i );
         }
     }
     else
@@ -546,7 +558,7 @@ void auto_exposure_algorithm::histogram_score(std::vector<int>& h, const int tot
         for (int i = under_exposure_limit + 1; i < over_exposure_limit; ++i)
         {
             m1 += h[i] * i;
-            m2 += h[i] * sqr(i);
+            m2 += static_cast< int64_t >( h[i] ) * sqr( i );
         }
     }
     score.main_mean = (float)((double)m1 / nn);
@@ -888,10 +900,10 @@ bool rect_gaussian_dots_target_calculator::validate_corners(const uint8_t* img)
     bool ok = true;
 
     static const int pos_diff_threshold = 4;
-    if (abs(_corners[0].x - _corners[2].x) > pos_diff_threshold ||
-        abs(_corners[1].x - _corners[3].x) > pos_diff_threshold ||
-        abs(_corners[0].y - _corners[1].y) > pos_diff_threshold ||
-        abs(_corners[2].y - _corners[3].y) > pos_diff_threshold)
+    if( std::abs( _corners[0].x - _corners[2].x ) > pos_diff_threshold
+        || std::abs( _corners[1].x - _corners[3].x ) > pos_diff_threshold
+        || std::abs( _corners[0].y - _corners[1].y ) > pos_diff_threshold
+        || std::abs( _corners[2].y - _corners[3].y ) > pos_diff_threshold )
     {
         ok = false;
     }

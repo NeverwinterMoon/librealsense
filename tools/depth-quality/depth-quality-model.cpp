@@ -1,8 +1,9 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2019 RealSense, Inc. All Rights Reserved.
 #include <iomanip>
 #include "depth-quality-model.h"
 #include <librealsense2/rs_advanced_mode.hpp>
+#include <realsense_imgui.h>
 #include "model-views.h"
 #include "viewer.h"
 #include "os.h"
@@ -11,10 +12,10 @@ namespace rs2
 {
     namespace depth_quality
     {
-        tool_model::tool_model(rs2::context &ctx)
+        tool_model::tool_model( rs2::context & ctx, bool disable_log_to_console )
             : _ctx(ctx),
               _pipe(ctx),
-              _viewer_model(ctx),
+              _viewer_model( ctx, disable_log_to_console ),
               _update_readonly_options_timer(std::chrono::seconds(6)), _roi_percent(0.4f),
               _roi_located(std::chrono::seconds(4)),
               _too_close(std::chrono::seconds(4)),
@@ -25,7 +26,9 @@ namespace rs2
               _skew_down(std::chrono::seconds(1)),
               _angle_alert(std::chrono::seconds(4)),
               _min_dist(300.f), _max_dist(2000.f), _max_angle(10.f),
-              _metrics_model(_viewer_model)
+              _metrics_model(_viewer_model),
+              _limit_capture(1),
+              _use_limit_capture(false)
         {
             _viewer_model.is_3d_view = true;
             _viewer_model.allow_3d_source_change = false;
@@ -46,36 +49,32 @@ namespace rs2
             rs2::pipeline_profile active_profile;
 
             // Adjust settings according to USB type
-            bool usb3_device = true;
+            bool usb2_device = false;
             auto devices = _ctx.query_devices();
             if (devices.size())
             {
                 auto dev = devices[0];
-                bool usb3_device = true;
-                if (dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR))
+                if (dev.supports(RS2_CAMERA_INFO_CONNECTION_TYPE))
                 {
-                    std::string usb_type = dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
-                    usb3_device = !(std::string::npos != usb_type.find("2."));
+                    std::string connection_type = dev.get_info(RS2_CAMERA_INFO_CONNECTION_TYPE);
+                    if (connection_type == "USB" && dev.supports(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR))
+                    {
+                        std::string usb_type = dev.get_info(RS2_CAMERA_INFO_USB_TYPE_DESCRIPTOR);
+                        usb2_device = (std::string::npos != usb_type.find("2."));
+                    }
                 }
             }
             else
                 return valid_config;
 
-            int requested_fps = usb3_device ? 30 : 15;
+            int requested_fps = usb2_device ? 15 : 30;
 
+            // open Depth and Infrared streams using default profile
             {
                 rs2::config cfg_default;
-                // Preferred configuration Depth + Synthetic Color
-                cfg_default.enable_stream(RS2_STREAM_DEPTH, -1, 0, 0, RS2_FORMAT_Z16, requested_fps);
-                cfg_default.enable_stream(RS2_STREAM_INFRARED, -1, 0, 0, RS2_FORMAT_RGB8, requested_fps);
+                cfg_default.enable_stream(RS2_STREAM_DEPTH, -1);
+                cfg_default.enable_stream(RS2_STREAM_INFRARED, -1);
                 cfgs.emplace_back(cfg_default);
-            }
-            // Use Infrared luminocity as a secondary video in case synthetic chroma is not supported
-            {
-                rs2::config cfg_alt;
-                cfg_alt.enable_stream(RS2_STREAM_DEPTH, -1, 0, 0, RS2_FORMAT_Z16, requested_fps);
-                cfg_alt.enable_stream(RS2_STREAM_INFRARED, -1, 0, 0, RS2_FORMAT_Y8, requested_fps);
-                cfgs.emplace_back(cfg_alt);
             }
 
             for (auto& cfg : cfgs)
@@ -106,8 +105,13 @@ namespace rs2
                 auto dev = _pipe.get_active_profile().get_device();
                 if (dev.is<rs400::advanced_mode>())
                 {
+                    bool dev_is_dds = false;
+                    if( dev.supports( RS2_CAMERA_INFO_CONNECTION_TYPE ) &&
+                        strcmp( dev.get_info( RS2_CAMERA_INFO_CONNECTION_TYPE ), "DDS" ) == 0 )
+                        dev_is_dds = true;
+
                     auto advanced_mode = dev.as<rs400::advanced_mode>();
-                    if (!advanced_mode.is_enabled())
+                    if( !advanced_mode.is_enabled() && !dev_is_dds ) // DDS devices cannot be toggled
                     {
                         window.add_on_load_message("Toggling device into Advanced Mode...");
                         advanced_mode.toggle_advanced_mode(true);
@@ -178,7 +182,9 @@ namespace rs2
             if (!_roi_located.eval())
             {
                 draw_notification(win, viewer_rect, 450,
-                    u8"\n   \uf1b2  Please point the camera to a flat Wall / Surface!",
+                    std::string(rsutils::string::from()
+                        << "\n   " << textual_icons::cube
+                        << "  Please point the camera to a flat Wall / Surface!"),
                     "");
                 return false;
             }
@@ -210,7 +216,9 @@ namespace rs2
             if (_skew_right.eval())
             {
                 draw_notification(win, viewer_rect, 400,
-                    u8"\n          \uf061  Rotate the camera slightly Right",
+                    std::string(rsutils::string::from()
+                        << "\n          " << textual_icons::arrow_right
+                        << "  Rotate the camera slightly Right"),
                     orientation_instruction);
                 return false;
             }
@@ -218,15 +226,20 @@ namespace rs2
             if (_skew_left.eval())
             {
                 draw_notification(win, viewer_rect, 400,
-                    u8"\n           \uf060  Rotate the camera slightly Left",
+                    std::string(rsutils::string::from()
+                        << "\n          " << textual_icons::arrow_left
+                        << "  Rotate the camera slightly Left"),
                     orientation_instruction);
                 return false;
             }
 
             if (_skew_up.eval())
             {
+
                 draw_notification(win, viewer_rect, 400,
-                    u8"\n            \uf062  Rotate the camera slightly Up",
+                    std::string(rsutils::string::from() 
+                        << "\n            " << textual_icons::arrow_up 
+                        << "  Rotate the camera slightly Up"),
                     orientation_instruction);
                 return false;
             }
@@ -234,7 +247,9 @@ namespace rs2
             if (_skew_down.eval())
             {
                 draw_notification(win, viewer_rect, 400,
-                    u8"\n          \uf063  Rotate the camera slightly Down",
+                    std::string(rsutils::string::from()
+                        << "\n            " << textual_icons::arrow_down
+                        << "  Rotate the camera slightly Down"),
                     orientation_instruction);
                 return false;
             }
@@ -242,7 +257,9 @@ namespace rs2
             if (_too_close.eval())
             {
                 draw_notification(win, viewer_rect, 400,
-                    u8"\n          \uf0b2  Move the camera further Away",
+                    std::string(rsutils::string::from()
+                        << "\n            " << textual_icons::up_down_left_right
+                        << "  Move the camera further Away"),
                     distance_instruction);
                 distance = true;
                 return true; // Show metrics even when too close/far
@@ -251,7 +268,9 @@ namespace rs2
             if (_too_far.eval())
             {
                 draw_notification(win, viewer_rect, 400,
-                    u8"\n        \uf066  Move the camera Closer to the wall",
+                    std::string(rsutils::string::from()
+                        << "\n            " << textual_icons::compress
+                        << "  Move the camera Closer to the wall"),
                     distance_instruction);
                 distance = true;
                 return true;
@@ -292,10 +311,6 @@ namespace rs2
 
             ImGui::PushStyleColor(ImGuiCol_Text,
                 blend(light_grey, any_guide ? 1.f : fade_factor));
-
-            //ImGui::PushFont(win.get_large_font());
-            //ImGui::Text(u8"\uf1e5 ");
-            //ImGui::PopFont();
 
             ImGui::PopStyleColor();
             ImGui::PushStyleColor(ImGuiCol_Text,
@@ -415,7 +430,9 @@ namespace rs2
                                     ImGui::SetCursorPos({ pos.x + 57, pos.y + bar_spacing * (i - j) + 14 });
                                     ImGui::PushStyleColor(ImGuiCol_Text,
                                         blend(blend(light_grey, alpha), distance_guide ? 1.f : fade_factor));
-                                    ImGui::Text(u8"\uf106");
+                                    std::string angle_right_str = std::string(rsutils::string::from()
+                            << textual_icons::angle_right);
+                                    ImGui::Text("%s", angle_right_str.c_str());
                                     ImGui::PopStyleColor();
                                 }
                             }
@@ -430,7 +447,8 @@ namespace rs2
                                     ImGui::SetCursorPos({ pos.x + 57, pos.y + bar_spacing * (i + j) + 14 });
                                     ImGui::PushStyleColor(ImGuiCol_Text,
                                         blend(blend(light_grey, alpha), distance_guide ? 1.f : fade_factor));
-                                    ImGui::Text(u8"\uf107");
+                                    std::string angle_left_str = std::string(rsutils::string::from() << textual_icons::angle_left);
+                                    ImGui::Text("%s", angle_left_str.c_str());
                                     ImGui::PopStyleColor();
                                 }
                             }
@@ -483,8 +501,8 @@ namespace rs2
             // *********************
             // Creating window menus
             // *********************
+            ImGui::SetNextWindowContentSize(ImVec2(_viewer_model.panel_width - 26 , 0.0f));
             ImGui::Begin("Control Panel", nullptr, viewer_ui_traits::imgui_flags | ImGuiWindowFlags_AlwaysVerticalScrollbar);
-            ImGui::SetContentRegionWidth(_viewer_model.panel_width - 26);
 
             if (_device_model.get())
             {
@@ -519,7 +537,6 @@ namespace rs2
                 {
                     update_configuration();
                 }
-                ImGui::SetContentRegionWidth(windows_width);
                 auto pos = ImGui::GetCursorScreenPos();
 
                 for (auto&& lambda : draw_later)
@@ -557,7 +574,8 @@ namespace rs2
 
                         if (_depth_sensor_model->draw_stream_selection(_error_message))
                         {
-                            if (_depth_sensor_model->is_selected_combination_supported())
+                            if (_depth_sensor_model->is_selected_combination_supported() &&
+                                !_depth_sensor_model->is_depth_calibration_profile())
                             {
                                 // Preserve streams and ui selections
                                 auto primary = _depth_sensor_model->get_selected_profiles().front().as<video_stream_profile>();
@@ -587,17 +605,6 @@ namespace rs2
                                 {
                                     try // Retries are needed to cope with HW stability issues
                                     {
-
-                                        auto dev = cfg.resolve(_pipe);
-                                        auto depth_sensor = dev.get_device().first< rs2::depth_sensor >();
-                                        if (depth_sensor.supports(RS2_OPTION_SENSOR_MODE))
-                                        {
-                                            auto depth_profile = dev.get_stream(RS2_STREAM_DEPTH);
-                                            auto w = depth_profile.as<video_stream_profile>().width();
-                                            auto h = depth_profile.as<video_stream_profile>().height();
-                                            depth_sensor.set_option(RS2_OPTION_SENSOR_MODE, (float)(resolution_from_width_height(w, h)));
-                                        }
-
                                         auto profile = _pipe.start(cfg);
                                         success = profile;
                                     }
@@ -622,7 +629,7 @@ namespace rs2
                         ImGui::Text("Region of Interest:");
                         ImGui::SameLine(); ImGui::SetCursorPosX(col1);
 
-                        ImGui::PushItemWidth(-1);
+                        ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - 25);
                         ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, { 1,1,1,1 });
 
                         static std::vector<std::string> items{ "80%", "60%", "40%", "20%" };
@@ -632,15 +639,12 @@ namespace rs2
                             bool allow_changing_roi = true;
                             try
                             {
-                                if (_depth_sensor_model)
+                                auto && ds = _depth_sensor_model->dev.first<depth_sensor>();
+                                if( ds.supports( RS2_OPTION_ENABLE_IR_REFLECTIVITY )
+                                    && ( ds.get_option( RS2_OPTION_ENABLE_IR_REFLECTIVITY ) == 1.0f ) )
                                 {
-                                    auto && ds = _depth_sensor_model->dev.first<depth_sensor>();
-                                    if( ds.supports( RS2_OPTION_ENABLE_IR_REFLECTIVITY )
-                                        && ( ds.get_option( RS2_OPTION_ENABLE_IR_REFLECTIVITY ) == 1.0f ) )
-                                    {
-                                        allow_changing_roi = false;
-                                        _error_message = "ROI cannot be changed while IR Reflectivity is enabled";
-                                    }
+                                    allow_changing_roi = false;
+                                    _error_message = "ROI cannot be changed while IR Reflectivity is enabled";
                                 }
                             }
                             catch (...) {}
@@ -661,37 +665,34 @@ namespace rs2
 
                         try
                         {
-                            if (_depth_sensor_model)
+                            auto && ds = _depth_sensor_model->dev.first< depth_sensor >();
+                            if (ds.supports(RS2_OPTION_ENABLE_IR_REFLECTIVITY))
                             {
-                                auto && ds = _depth_sensor_model->dev.first< depth_sensor >();
-                                if (ds.supports(RS2_OPTION_ENABLE_IR_REFLECTIVITY))
+                                ImGui::SetCursorPosX(col0);
+                                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+
+                                bool current_ir_reflectivity_opt
+                                    = ds.get_option(RS2_OPTION_ENABLE_IR_REFLECTIVITY);
+
+                                if (ImGui::Checkbox("IR Reflectivity",
+                                    &current_ir_reflectivity_opt))
                                 {
-                                    ImGui::SetCursorPosX(col0);
-                                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+                                    // Deny enabling IR Reflectivity on ROI != 20% [RS5-8358]
+                                    if (0.2f == _roi_percent)
+                                        ds.set_option(RS2_OPTION_ENABLE_IR_REFLECTIVITY,
+                                            current_ir_reflectivity_opt);
+                                    else
+                                        _error_message
+                                        = "Please set 'VGA' resolution, 'Max Range' preset and "
+                                        "20% ROI before enabling IR Reflectivity";
+                                }
 
-                                    bool current_ir_reflectivity_opt
-                                        = ds.get_option(RS2_OPTION_ENABLE_IR_REFLECTIVITY);
-
-                                    if (ImGui::Checkbox("IR Reflectivity",
-                                        &current_ir_reflectivity_opt))
-                                    {
-                                        // Deny enabling IR Reflectivity on ROI != 20% [RS5-8358]
-                                        if (0.2f == _roi_percent)
-                                            ds.set_option(RS2_OPTION_ENABLE_IR_REFLECTIVITY,
-                                                current_ir_reflectivity_opt);
-                                        else
-                                            _error_message
-                                            = "Please set 'VGA' resolution, 'Max Range' preset and "
-                                            "20% ROI before enabling IR Reflectivity";
-                                    }
-
-                                    if (ImGui::IsItemHovered())
-                                    {
-                                        ImGui::SetTooltip(
-                                            "%s",
-                                            ds.get_option_description(
-                                                RS2_OPTION_ENABLE_IR_REFLECTIVITY ) );
-                                    }
+                                if (ImGui::IsItemHovered())
+                                {
+                                    RsImGui::CustomTooltip(
+                                        "%s",
+                                        ds.get_option_description(
+                                            RS2_OPTION_ENABLE_IR_REFLECTIVITY ) );
                                 }
                             }
                         }
@@ -706,7 +707,7 @@ namespace rs2
                         ImGui::Text("Distance:");
                         if (ImGui::IsItemHovered())
                         {
-                            ImGui::SetTooltip("Estimated distance to an average within the ROI of the target (wall) in mm");
+                            RsImGui::CustomTooltip("Estimated distance to an average within the ROI of the target (wall) in mm");
                         }
                         ImGui::SameLine(); ImGui::SetCursorPosX(col1);
 
@@ -734,7 +735,7 @@ namespace rs2
                         }
                         if (ImGui::IsItemHovered())
                         {
-                            ImGui::SetTooltip("True measured distance to the wall in mm");
+                            RsImGui::CustomTooltip("True measured distance to the wall in mm");
                         }
                         ImGui::SameLine(); ImGui::SetCursorPosX(col1);
                         if (_use_ground_truth)
@@ -757,10 +758,36 @@ namespace rs2
 
                         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
 
+                        ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, light_blue);
+                        std::string limit_captures("Limit Captures");
+                        if (_use_limit_capture) limit_captures += ":";
+                        ImGui::Checkbox(limit_captures.c_str(), &_use_limit_capture);
+                        if (ImGui::IsItemHovered())
+                        {
+                            RsImGui::CustomTooltip("Capture will be limited to this number of records");
+                        }
+                        if (_use_limit_capture)
+                        {
+                            ImGui::SameLine(); ImGui::SetCursorPosX(col1);
+                            ImGui::PushItemWidth(120);
+                            if (ImGui::InputInt("##LC", &_limit_capture, 1))
+                            {
+                                // Ensure the value is positive
+                                if (_limit_capture <= 0)
+                                {
+                                    _limit_capture = 1; // Set to a default positive value
+                                }
+                            }
+                            ImGui::PopItemWidth();
+                        }
+                        ImGui::PopStyleColor();
+
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
+
                         ImGui::Text("Angle:");
                         if (ImGui::IsItemHovered())
                         {
-                            ImGui::SetTooltip("Estimated angle to the wall in degrees");
+                            RsImGui::CustomTooltip("Estimated angle to the wall in degrees");
                         }
                         ImGui::SameLine(); ImGui::SetCursorPosX(col1);
                         static float prev_metric_angle = 0;
@@ -796,21 +823,28 @@ namespace rs2
                         ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, white);
                         if (_metrics_model.is_recording())
                         {
-                            if (ImGui::Button(u8"\uf0c7 Stop_record", { 140, 25 }))
+                            if (ImGui::Button(textual_icons::save, { 140, 25 }))
                             {
                                 _metrics_model.stop_record(_device_model.get());
                             }
                         }
                         else
                         {
-                            if (ImGui::Button(u8"\uf0c7 Start_record", { 140, 25 }))
+                            if (ImGui::Button(textual_icons::save, { 140, 25 }))
                             {
-                                _metrics_model.start_record();
+                                if (_use_limit_capture)
+                                {
+                                    _metrics_model.start_record(_limit_capture);
+                                }
+                                else
+                                {
+                                    _metrics_model.start_record();
+                                }
                             }
 
                             if (ImGui::IsItemHovered())
                             {
-                                ImGui::SetTooltip("Save Metrics snapshot. This will create:\nPNG image with the depth frame\nPLY 3D model with the point cloud\nJSON file with camera settings you can load later\nand a CSV with metrics recent values");
+                                RsImGui::CustomTooltip("Save Metrics snapshot. This will create:\nPNG image with the depth frame\nPLY 3D model with the point cloud\nJSON file with camera settings you can load later\nand a CSV with metrics recent values");
                             }
                         }
 
@@ -960,6 +994,7 @@ namespace rs2
                     _viewer_model.begin_stream(sub, profile);
                     _viewer_model.streams[profile.unique_id()].texture->colorize = sub->depth_colorizer;
                     _viewer_model.streams[profile.unique_id()].texture->yuy2rgb = sub->yuy2rgb;
+                    _viewer_model.streams[profile.unique_id()].texture->m420_to_rgb = sub->m420_to_rgb;
                     _viewer_model.streams[profile.unique_id()].texture->y411 = sub->y411;
 
                     if (profile.stream_type() == RS2_STREAM_DEPTH)
@@ -973,6 +1008,8 @@ namespace rs2
                                                            int(depth_profile.width() * (0.5f + 0.5f*_roi_percent)),
                                                            int(depth_profile.height() * (0.5f + 0.5f*_roi_percent)) },
                                                             _roi_percent);
+
+                        sub->streaming_map[RS2_STREAM_DEPTH] = true;
                     }
                 }
 
@@ -1028,7 +1065,9 @@ namespace rs2
             _plane_fit(false),
             _roi_percentage(0.4f),
             _active(true),
-            _recorder(viewer_model)
+            _recorder(viewer_model),
+            _limit_captures(0),
+            _is_capture_limited(false)
         {
             _worker_thread = std::thread([this]() {
                 while (_active)
@@ -1080,7 +1119,25 @@ namespace rs2
                         }
                     }
                     if (_recorder.is_recording())
-                        _recorder.add_sample(frames, std::move(sample));
+                    {
+                        if (_is_capture_limited)
+                        { 
+                            if (_limit_captures > 0)
+                            {
+                                --_limit_captures;
+                                _recorder.add_sample(frames, std::move(sample));
+                            }
+                            else
+                            {
+                                _recorder.stop_record(nullptr);
+                            }
+                        }
+                        else
+                        {
+                            _recorder.add_sample(frames, std::move(sample));
+                        }
+                    }
+                        
 
                     // Artificially slow down the calculation, so even on small ROIs / resolutions
                     // the output is updated within reasonable interval (keeping it human readable)
@@ -1092,8 +1149,14 @@ namespace rs2
         metrics_model::~metrics_model()
         {
             _active = false;
-            _worker_thread.join();
-            reset();
+            try
+            {
+                _worker_thread.join();
+                reset();
+            }
+            catch(...)
+            { //Do nothing, just don't throw from destructor.
+            }
         }
 
         std::shared_ptr<metric_plot> tool_model::make_metric(
@@ -1182,10 +1245,12 @@ namespace rs2
                 auto col0 = ImGui::GetCursorPos();
                 ImGui::SetCursorPosX(left_x);
                 ImGui::PushFont(win.get_large_font());
-                ImGui::Text(u8"\uf102");
+                std::string angle_double_up_str = std::string(rsutils::string::from()
+                            << textual_icons::angle_double_up);
+                ImGui::Text("%s", angle_double_up_str.c_str());
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("This metric shows positive trend");
+                    RsImGui::CustomTooltip("This metric shows positive trend");
                 }
                 ImGui::PopFont();
                 ImGui::SameLine(); ImGui::SetCursorPos(col0);
@@ -1198,10 +1263,12 @@ namespace rs2
                 auto col0 = ImGui::GetCursorPos();
                 ImGui::SetCursorPosX(left_x);
                 ImGui::PushFont(win.get_large_font());
-                ImGui::Text(u8"\uf103");
+                std::string angle_double_down_str = std::string(rsutils::string::from()
+                            << textual_icons::angle_double_down);
+                ImGui::Text("%s", angle_double_down_str.c_str());
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("This metric shows negative trend");
+                    RsImGui::CustomTooltip("This metric shows negative trend");
                 }
                 ImGui::PopFont();
                 ImGui::SameLine(); ImGui::SetCursorPos(col0);
@@ -1259,7 +1326,10 @@ namespace rs2
 
             //Store metric environment
             csv << "\nEnvironment:\nPlane-Fit_distance_mm," << (_metrics->_plane_fit ? std::to_string(_metrics->_latest_metrics.distance) : "N/A") << std::endl;
-            csv << "Ground-Truth_Distance_mm," << (_metrics->_use_gt ? std::to_string(_metrics->_ground_truth_mm ) : "N/A") << std::endl;
+            {
+                std::lock_guard< std::mutex > lock( _metrics->_m );
+                csv << "Ground-Truth_Distance_mm," << (_metrics->_use_gt ? std::to_string(_metrics->_ground_truth_mm ) : "N/A") << std::endl;
+            }
 
             // Generate columns header
             csv << "\nSample Id,Frame #,Timestamp (ms),";

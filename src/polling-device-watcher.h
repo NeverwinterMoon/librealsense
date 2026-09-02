@@ -1,9 +1,10 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
 #include "backend.h"
+#include "platform/device-watcher.h"
 #include <rsutils/concurrency/concurrency.h>
 #include "callback-invocation.h"
 

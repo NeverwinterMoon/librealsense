@@ -1,23 +1,28 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
-#include "../core/processing.h"
-#include "../image.h"
+#include <src/core/synthetic-source-interface.h>
+#include "../core/processing-block-interface.h"
 #include "../source.h"
+
+#include <src/core/info.h>
+#include <src/core/options-container.h>
+
 #include <librealsense2/hpp/rs_frame.hpp>
 #include <librealsense2/hpp/rs_processing.hpp>
 
 namespace librealsense
 {
+
+
+    // A synthetic source is simply a wrapper around a new frame_source and its exposure thru the rs2_source APIs
+    //
     class synthetic_source : public synthetic_source_interface
     {
     public:
-        synthetic_source(frame_source& actual)
-            : _actual_source(actual), _c_wrapper(new rs2_source{ this })
-        {
-        }
+        synthetic_source( frame_source & actual );
 
         frame_interface* allocate_video_frame(std::shared_ptr<stream_profile_interface> stream,
             frame_interface* original,
@@ -38,7 +43,7 @@ namespace librealsense
 
         void frame_ready(frame_holder result) override;
 
-        rs2_source* get_c_wrapper() override { return _c_wrapper.get(); }
+        rs2_source* get_rs2_source() const { return _c_wrapper.get(); }
 
     private:
         frame_source & _actual_source;
@@ -50,8 +55,8 @@ namespace librealsense
     public:
         processing_block(const char* name);
 
-        void set_processing_callback(frame_processor_callback_ptr callback) override;
-        void set_output_callback(frame_callback_ptr callback) override;
+        void set_processing_callback( rs2_frame_processor_callback_sptr callback) override;
+        void set_output_callback( rs2_frame_callback_sptr callback) override;
         void invoke(frame_holder frames) override;
         synthetic_source_interface& get_source() override { return _source_wrapper; }
 
@@ -59,7 +64,7 @@ namespace librealsense
     protected:
         frame_source _source;
         std::mutex _mutex;
-        frame_processor_callback_ptr _callback;
+        rs2_frame_processor_callback_sptr _callback;
         synthetic_source _source_wrapper;
     };
 
@@ -148,7 +153,7 @@ namespace librealsense
         virtual void init_profiles_info(const rs2::frame* f);
         rs2::frame process_frame(const rs2::frame_source & source, const rs2::frame & f) override;
         virtual rs2::frame prepare_frame(const rs2::frame_source& source, const rs2::frame& f);
-        virtual void process_function(byte * const dest[], const byte * source, int width, int height, int actual_size, int input_size) = 0;
+        virtual void process_function(uint8_t * const dest[], const uint8_t * source, int width, int height, int actual_size, int input_size) = 0;
 
         rs2::stream_profile _target_stream_profile;
         rs2::stream_profile _source_stream_profile;
@@ -174,7 +179,7 @@ namespace librealsense
             int right_idx);
 
     protected:
-        virtual void process_function(byte * const dest[], const byte * source, int width, int height, int actual_size, int input_size) = 0;
+        virtual void process_function(uint8_t * const dest[], const uint8_t * source, int width, int height, int actual_size, int input_size) = 0;
         void configure_processing_callback();
 
         std::shared_ptr<stream_profile_interface> _source_stream_profile;
@@ -204,57 +209,6 @@ namespace librealsense
         bool should_process(const rs2::frame& frame) override;
     };
 
-    // Sequential chained processing blocks
-    // The order of the processing blocks defines the execution flow.
-    class LRS_EXTENSION_API composite_processing_block : public processing_block
-    {
-    public:
-        class bypass_option : public option
-        {
-        public:
-            bypass_option(composite_processing_block* parent, rs2_option opt)
-                : _parent(parent), _opt(opt) {}
-
-            void set(float value) override {
-                // While query and other read operations
-                // will only read from the currently selected
-                // block, setting an option will propogate
-                // to all blocks in the group
-                for (size_t i = 0; i < _parent->_processing_blocks.size(); i++)
-                {
-                    if (_parent->_processing_blocks[i]->supports_option(_opt))
-                    {
-                        _parent->_processing_blocks[i]->get_option(_opt).set(value);
-                    }
-                }
-            }
-            float query() const override { return get().query(); }
-            option_range get_range() const override { return get().get_range(); }
-            bool is_enabled() const override { return get().is_enabled(); }
-            bool is_read_only() const override { return get().is_read_only(); }
-            const char* get_description() const override { return get().get_description(); }
-            const char* get_value_description(float v) const override { return get().get_value_description(v); }
-            void enable_recording(std::function<void(const option &)> record_action) override {}
-
-            option& get() { return _parent->get(_opt).get_option(_opt); }
-            const option& get() const { return _parent->get(_opt).get_option(_opt); }
-        private:
-            composite_processing_block* _parent;
-            rs2_option _opt;
-        };
-
-        composite_processing_block();
-        composite_processing_block(const char* name);
-        virtual ~composite_processing_block() { _source.flush(); };
-
-        processing_block& get(rs2_option option);
-        void add(std::shared_ptr<processing_block> block);
-        void set_output_callback(frame_callback_ptr callback) override;
-        void invoke(frame_holder frames) override;
-
-    protected:
-        std::vector<std::shared_ptr<processing_block>> _processing_blocks;
-    };
 }
 
 // API structures
@@ -265,11 +219,8 @@ struct rs2_options
     librealsense::options_interface* options;
 
     virtual ~rs2_options() = default;
-};
 
-struct rs2_options_list
-{
-    std::vector<rs2_option> list;
+    rsutils::subscription subscription;
 };
 
 struct rs2_processing_block : public rs2_options

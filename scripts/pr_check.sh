@@ -17,35 +17,35 @@ function check_folder {
                if [[ ! $filename == *"usbhost"* ]]; then
                     # Only check files that are not .gitignore-d
                     if [[ $(git check-ignore $filename | wc -l) -eq 0 ]]; then
-                         if [[ $(grep -oP "(?<=\(c\) )(.*)(?= Intel)" $filename | wc -l) -eq 0 ]]; then
+                         if [[ $(grep -oP "(?<=\(c\) )(.*)(?= RealSense, Inc)" $filename | wc -l) -eq 0 ]]; then
                               echo "[ERROR] $filename is missing the copyright notice"
                               ok=$((ok+1))
 
                               if [[ $2 == *"fix"* ]]; then
-                                   if [[ $(date +%Y) == "2019" ]]; then
+                                   if [[ $(date +%Y) == "2025" ]]; then
                                         if [[ $filename == *".hpp"* ]]; then
                                              echo "Trying to auto-resolve...";
-                                             ex -sc '1i|// Copyright(c) 2019 Intel Corporation. All Rights Reserved.' -cx $filename
+                                             ex -sc '1i|// Copyright(c) 2025 RealSense, Inc. All Rights Reserved.' -cx $filename
                                              fixed=$((fixed+1))
                                         fi
                                         if [[ $filename == *".cpp"* ]]; then
                                              echo "Trying to auto-resolve...";
-                                             ex -sc '1i|// Copyright(c) 2019 Intel Corporation. All Rights Reserved.' -cx $filename
+                                             ex -sc '1i|// Copyright(c) 2025 RealSense, Inc. All Rights Reserved.' -cx $filename
                                              fixed=$((fixed+1))
                                         fi
                                         if [[ $filename == *".h"* ]]; then
                                              echo "Trying to auto-resolve...";
-                                             ex -sc '1i|/* Copyright(c) 2019 Intel Corporation. All Rights Reserved. */' -cx $filename
+                                             ex -sc '1i|/* Copyright(c) 2025 RealSense, Inc. All Rights Reserved. */' -cx $filename
                                              fixed=$((fixed+1))
                                         fi
                                         if [[ $filename == *".js"* ]]; then
                                              echo "Trying to auto-resolve...";
-                                             ex -sc '1i|// Copyright(c) 2019 Intel Corporation. All Rights Reserved.' -cx $filename
+                                             ex -sc '1i|// Copyright(c) 2025 RealSense, Inc. All Rights Reserved.' -cx $filename
                                              fixed=$((fixed+1))
                                         fi
-                                        if [[ $filename == *".txt"* ]]; then
+                                        if [[ $filename == *.txt || $filename == *.py ]]; then
                                              echo "Trying to auto-resolve...";
-                                             ex -sc '1i|# Copyright(c) 2019 Intel Corporation. All Rights Reserved.' -cx $filename
+                                             ex -sc '1i|# Copyright(c) 2025 RealSense Inc. All Rights Reserved.' -cx $filename
                                              fixed=$((fixed+1))
                                         fi
                                    else
@@ -121,13 +121,14 @@ if [[ $1 == *"help"* ]]; then
      echo "    --fix    Try to auto-fix defects"
      exit 0
 fi
-	
+
 cd ..
 check_folder CMake $1
 check_folder common $1
 check_folder include $1
 check_folder src $1
 check_folder examples $1
+check_folder third-party/realdds $1
 check_folder third-party/rsutils $1
 check_folder tools $1
 cd scripts

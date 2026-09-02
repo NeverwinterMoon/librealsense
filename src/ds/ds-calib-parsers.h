@@ -1,10 +1,12 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
 #include "ds-device-common.h"
 #include "core/video.h"
+#include <rsutils/lazy.h>
+
 
 namespace librealsense
 {
@@ -28,11 +30,10 @@ namespace librealsense
         float3x3 imu_to_depth_alignment() { return (*_calib_parser)->imu_to_depth_alignment(); }
     private:
         std::shared_ptr<hw_monitor> _hw_monitor;
-        lazy< std::shared_ptr<mm_calib_parser>> _calib_parser;
-        lazy<std::vector<uint8_t>>      _imu_eeprom_raw;
+        rsutils::lazy< std::shared_ptr< mm_calib_parser > > _calib_parser;
+        rsutils::lazy< std::vector< uint8_t > > _imu_eeprom_raw;
         std::vector<uint8_t>            get_imu_eeprom_raw() const;
-        std::vector<uint8_t>            get_imu_eeprom_raw_l515() const;
-        lazy<std::vector<uint8_t>>      _fisheye_calibration_table_raw;
+        rsutils::lazy< std::vector< uint8_t > > _fisheye_calibration_table_raw;
         uint16_t _pid;
     };
 

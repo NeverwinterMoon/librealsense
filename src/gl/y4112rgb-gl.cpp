@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 #include <librealsense2/hpp/rs_sensor.hpp>
 #include <librealsense2/hpp/rs_processing.hpp>
@@ -135,10 +135,17 @@ y411_2rgb::y411_2rgb()
 
 y411_2rgb::~y411_2rgb()
 {
-    perform_gl_action([&]()
+    try
     {
-        cleanup_gpu_resources();
-    }, []{});
+        perform_gl_action( [&]()
+        {
+            cleanup_gpu_resources();
+        }, [] {} );
+    }
+    catch(...)
+    {
+        LOG_DEBUG( "Error while cleaning up gpu resources" );
+    }
 }
 
 rs2::frame y411_2rgb::process_frame(const rs2::frame_source& src, const rs2::frame& f)
@@ -172,6 +179,8 @@ rs2::frame y411_2rgb::process_frame(const rs2::frame_source& src, const rs2::fra
         if (!res) return;
         
         auto gf = dynamic_cast<gpu_addon_interface*>((frame_interface*)res.get());
+        if (!gf)
+            throw std::runtime_error("Frame interface is not gpu addon interface");
         
         uint32_t yuy_texture;
         

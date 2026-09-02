@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 #include <set>
@@ -12,6 +12,7 @@
     #include <conio.h>
     #define NEW_LINE '\r'
     #define BACKSPACE '\b'
+    #define BACKSPACE_ALT 8  // alternative for backspace on some terminals
     #define BACKSLASH_ZERO '\0'
     #define UP_ARROW_KEY {72}
     #define DOWN_ARROW_KEY {80}
@@ -20,6 +21,7 @@
     #include <termios.h>
     #define NEW_LINE '\n'
     #define BACKSPACE 127
+    #define BACKSPACE_ALT 8 // alternative for backspace on some terminals
     #define BACKSLASH_ZERO ' '
     #define UP_ARROW_KEY {27, 91, 65}
     #define DOWN_ARROW_KEY {27, 91, 66}

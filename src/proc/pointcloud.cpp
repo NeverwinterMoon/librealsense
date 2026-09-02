@@ -1,24 +1,31 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
+
+#include "pointcloud.h"
+#include "occlusion-filter.h"
+#include <src/environment.h>
+#include <src/core/depth-frame.h>
+#include <src/option.h>
+#include <src/device.h>
+#include <src/stream.h>
+#include <src/points.h>
+#include <src/core/sensor-interface.h>
+#include "device-calibration.h"
 
 #include <librealsense2/rs.hpp>
-#include "environment.h"
-#include "proc/occlusion-filter.h"
-#include "proc/pointcloud.h"
-#include "option.h"
-#include "environment.h"
-#include "context.h"
-#include "../device.h"
-#include "../stream.h"
+
 #include <rsutils/string/from.h>
-#include "device-calibration.h"
+#include <rsutils/easylogging/easyloggingpp.h>
 
 #ifdef RS2_USE_CUDA
 #include "proc/cuda/cuda-pointcloud.h"
+#include "rsutils/accelerators/gpu.h"
 #endif
 #ifdef __SSSE3__
 #include "proc/sse/sse-pointcloud.h"
 #endif
+#include "proc/neon/neon-pointcloud.h"
+
 
 namespace librealsense
 {
@@ -97,7 +104,7 @@ namespace librealsense
     }
 
     template< class callback >
-    calibration_change_callback_ptr create_calibration_change_callback_ptr( callback&& cb )
+    rs2_calibration_change_callback_sptr create_calibration_change_callback_ptr( callback&& cb )
     {
         return {
             new rs2::calibration_change_callback< callback >( std::move( cb ) ),
@@ -138,7 +145,8 @@ namespace librealsense
                                         sensor_interface & s = dev->get_sensor( x );
                                         for( auto const & sp : s.get_active_streams() )
                                         {
-                                            if( sp->get_stream_type() == RS2_STREAM_COLOR )
+                                            if(( sp->get_stream_type() == RS2_STREAM_COLOR ) &&
+                                               ( _stream_filter.stream == RS2_STREAM_COLOR ))
                                             {
                                                 auto vspi = As< video_stream_profile_interface >(
                                                     sp.get() );
@@ -390,13 +398,21 @@ namespace librealsense
     std::shared_ptr<pointcloud> pointcloud::create()
     {
         #ifdef RS2_USE_CUDA
+        if (rsutils::rs2_is_gpu_available())
+        {
+            LOG_INFO("Using CUDA-optimized pointcloud implementation");
             return std::make_shared<librealsense::pointcloud_cuda>();
-        #else
-        #ifdef __SSSE3__
-            return std::make_shared<librealsense::pointcloud_sse>();
-        #else
-            return std::make_shared<librealsense::pointcloud>();
+        }
         #endif
+        #ifdef __SSSE3__
+            LOG_INFO("Using SSE-optimized pointcloud implementation");
+            return std::make_shared<librealsense::pointcloud_sse>();
+        #elif defined(__ARM_NEON) && defined(BUILD_WITH_NEON) && !defined(ANDROID)
+            LOG_INFO("Using NEON-optimized pointcloud implementation");
+            return std::make_shared<librealsense::pointcloud_neon>();
+        #else
+            LOG_INFO("Using generic (non-SIMD) pointcloud implementation");
+            return std::make_shared<librealsense::pointcloud>();
         #endif
     }
 

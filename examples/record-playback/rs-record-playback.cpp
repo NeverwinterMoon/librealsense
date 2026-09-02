@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
 #include "example.hpp"          // Include short list of convenience functions for rendering
@@ -7,6 +7,9 @@
 
 #include <imgui.h>
 #include "imgui_impl_glfw.h"
+#include "imgui_impl_glfw.h"
+#include <imgui_impl_opengl3.h>
+#include<realsense_imgui.h>
 
 // Includes for time display
 #include <sstream>
@@ -23,7 +26,11 @@ int main(int argc, char * argv[]) try
 {
     // Create a simple OpenGL window for rendering:
     window app(1280, 720, "RealSense Record and Playback Example");
-    ImGui_ImplGlfw_Init(app, false);
+    // Setup Dear ImGui context
+    ImGui::CreateContext();
+    // Setup Platform/Renderer backends
+    ImGui_ImplGlfw_InitForOpenGL(app, false);
+    ImGui_ImplOpenGL3_Init();
 
     // Create booleans to control GUI (recorded - allow play button, recording - show 'recording to file' text)
     bool recorded = false;
@@ -61,7 +68,8 @@ int main(int argc, char * argv[]) try
             | ImGuiWindowFlags_NoResize
             | ImGuiWindowFlags_NoMove;
 
-        ImGui_ImplGlfw_NewFrame(1);
+        RsImGui::PushNewFrame();
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize({ app.width(), app.height() });
         ImGui::Begin("app", nullptr, flags);
 
@@ -92,7 +100,7 @@ int main(int argc, char * argv[]) try
                     pipe->stop(); // Stop the pipeline with the default configuration
                     pipe = std::make_shared<rs2::pipeline>();
                     rs2::config cfg; // Declare a new configuration
-                    cfg.enable_record_to_file("a.bag");
+                    cfg.enable_record_to_file("a.db3");
                     pipe->start(cfg); //File will be opened at this point
                     device = pipe->get_active_profile().get_device();
                 }
@@ -111,7 +119,7 @@ int main(int argc, char * argv[]) try
                 if (recording)
                 {
                     ImGui::SetCursorPos({ app.width() / 2 - 100, 3 * app.height() / 5 + 60 });
-                    ImGui::TextColored({ 255 / 255.f, 64 / 255.f, 54 / 255.f, 1 }, "Recording to file 'a.bag'");
+                    ImGui::TextColored({ 255 / 255.f, 64 / 255.f, 54 / 255.f, 1 }, "Recording to file 'a.db3'");
                 }
 
                 // Pause the playback if button is clicked
@@ -147,7 +155,7 @@ int main(int argc, char * argv[]) try
                     pipe->stop(); // Stop streaming with default configuration
                     pipe = std::make_shared<rs2::pipeline>();
                     rs2::config cfg;
-                    cfg.enable_device_from_file("a.bag");
+                    cfg.enable_device_from_file("a.db3");
                     pipe->start(cfg); //File will be opened in read mode at this point
                     device = pipe->get_active_profile().get_device();
                 }
@@ -192,10 +200,13 @@ int main(int argc, char * argv[]) try
 
         ImGui::End();
         ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Render depth frames from the default configuration, the recorder or the playback
         depth_image.render(depth, { app.width() * 0.25f, app.height() * 0.25f, app.width() * 0.5f, app.height() * 0.75f  });
     }
+    // Cleanup
+    RsImGui::PopNewFrame();
     return EXIT_SUCCESS;
 }
 catch (const rs2::error & e)

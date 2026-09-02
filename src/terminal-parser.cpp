@@ -1,7 +1,8 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2020 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2020 RealSense, Inc. All Rights Reserved.
 
 #include "terminal-parser.h"
+#include <iostream>
 #include <rsutils/string/from.h>
 
 
@@ -32,12 +33,6 @@ namespace librealsense
 
         auto raw_data = build_raw_command_data(command, params);
 
-        for (auto b : raw_data)
-        {
-            cout << hex << fixed << setfill('0') << setw(2) << (int)b << " ";
-        }
-        cout << endl;
-
         return raw_data;
     }
 
@@ -66,10 +61,13 @@ namespace librealsense
             data_vec.insert(data_vec.begin(), data.begin(), data.end());
             return data_vec;
         }
-        else
+        else if (response.size() == 4) // if the response contains only the opcode, there's no response other than the opcode, return success message
         {
-            return response;
+            unsigned opcode = response[0];
+            auto str = (rsutils::string::from() << "Command succeeded, returned 0x" << hex << opcode).str();
+            return std::vector<uint8_t>(str.begin(), str.end());
         }
+        return response;
     }
 
     vector<uint8_t> terminal_parser::build_raw_command_data(const command_from_xml& command, const vector<string>& params) const

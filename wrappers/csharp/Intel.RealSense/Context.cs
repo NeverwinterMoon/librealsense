@@ -53,6 +53,18 @@ namespace Intel.RealSense
         }
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="Context"/> class with json_settings.
+        /// 
+        /// </summary>
+        public Context(string json_settings)
+        {
+            object error;
+
+            handle = NativeMethods.rs2_create_context_ex(ApiVersion, json_settings, out error);
+            onDevicesChangedCallback = new rs2_devices_changed_callback(OnDevicesChangedInternal);
+        }
+
+        /// <summary>
         /// Gets the safe handle
         /// </summary>
         /// <exception cref="ObjectDisposedException">Thrown when <see cref="SafeHandle.IsInvalid"/></exception>
@@ -174,6 +186,15 @@ namespace Intel.RealSense
         {
             object error;
             NativeMethods.rs2_context_remove_device(handle, file, out error);
+        }
+
+        /// <summary>Converts a legacy ROS1 .bag recording to a ROS2 .db3 file</summary>
+        /// <param name="inputBagPath">Path to the input .bag file</param>
+        /// <param name="outputDb3Path">Path for the output .db3 file</param>
+        public void ConvertBagToDb3(string inputBagPath, string outputDb3Path)
+        {
+            object error;
+            NativeMethods.rs2_convert_bag_to_db3(inputBagPath, outputDb3Path, handle, IntPtr.Zero, IntPtr.Zero, out error);
         }
 
         private void OnDevicesChangedInternal(IntPtr removedList, IntPtr addedList, IntPtr userData)

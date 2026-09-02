@@ -1,5 +1,5 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 #include "pyrealsense2.h"
 #include <librealsense2/rs.hpp>
@@ -8,11 +8,12 @@ Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
 
 PYBIND11_MODULE(NAME, m) {
     m.doc() = R"pbdoc(
-        LibrealsenseTM Python Bindings
+        Librealsense Python Bindings
         ==============================
-        Library for accessing Intel RealSenseTM cameras
+        Library for accessing RealSense cameras
     )pbdoc";
     m.attr("__version__") = RS2_API_VERSION_STR;
+    m.attr("__full_version__") = RS2_API_FULL_VERSION_STR;
 
     init_c_files(m);
     init_types(m);
@@ -29,6 +30,7 @@ PYBIND11_MODULE(NAME, m) {
     init_advanced_mode(m);
     init_serializable_device(m);
     init_util(m);
+    init_eth_config(m);
     
     /** rs_export.hpp **/
     py::class_<rs2::save_to_ply, rs2::filter>(m, "save_to_ply")
@@ -59,6 +61,7 @@ PYBIND11_MODULE(NAME, m) {
     // on destruction/exit. Usually this works fine, except that here, with Python and its GIL,
     // Pybind tries to acquire the GIL when the thread state is no longer valid and we get
     // into an infinite wait.
+    // This is how the code would look like if we didn't had this issue
 #if 0
     m.def( "log_to_callback",
            []( rs2_log_severity min_severity, std::function< void( rs2_log_severity, rs2::log_message ) > callback )

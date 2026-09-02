@@ -1,9 +1,9 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 #include "uvc-types.h"
-#include "../types.h"
+#include "uvc-device.h"
 
 #include "stdio.h"
 #include "stdlib.h"

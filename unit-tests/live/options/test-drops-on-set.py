@@ -1,26 +1,36 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2020 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2020 RealSense, Inc. All Rights Reserved.
 
-#test:device D400* !D457
-#test:device L500*
+# Currently, we exclude D457 and D401 as it's failing
+
+# test:device D400* !D457 !D401
+# test:donotrun:!nightly
 
 import platform
 import pyrealsense2 as rs
 from rspy import test
 from rspy import log
+from rspy import tests_wrapper as tw
 import time
 
-dev = test.find_first_device_or_exit()
-depth_sensor = dev.first_depth_sensor()
-color_sensor = dev.first_color_sensor()
+dev, _ = test.find_first_device_or_exit()
+product_name = dev.get_info(rs.camera_info.name)
 product_line = dev.get_info(rs.camera_info.product_line)
+depth_sensor = dev.first_depth_sensor()
+color_sensor = None
+try:
+    color_sensor = dev.first_color_sensor()
+except RuntimeError as rte:
+    if 'D421' not in product_name and 'D405' not in product_name: # Cameras with no color sensor may fail.
+        test.unexpected_exception()
 
 previous_depth_frame_number = -1
 previous_color_frame_number = -1
 after_set_option = False
 
+tw.start_wrapper( dev )
 
-def get_allowed_drops(): 
+def get_allowed_drops():
     global after_set_option
     # On Linux, there is a known issue (RS5-7148) where up to 4 frame drops can occur
     # sequentially after setting control values during streaming... on Windows this
@@ -44,7 +54,7 @@ def check_depth_frame_drops(frame):
     is_d400 = 0
     if product_line == "D400":
         is_d400 = 1
-    test.check_frame_drops(frame, previous_depth_frame_number, allowed_drops, is_d400)
+    test.check_frame_drops(frame, previous_depth_frame_number, allowed_drops, allow_frame_counter_reset = is_d400)
     previous_depth_frame_number = frame.get_frame_number()
 
 
@@ -55,53 +65,39 @@ def check_color_frame_drops(frame):
     previous_color_frame_number = frame.get_frame_number()
 
 
-# Use a profile that's common to both L500 and D400
-depth_profile = next(p for p in
-                     depth_sensor.profiles if p.fps() == 30
-                     and p.stream_type() == rs.stream.depth
-                     and p.format() == rs.format.z16
-                     and p.as_video_stream_profile().width() == 640
-                     and p.as_video_stream_profile().height() == 480)
+# Use a default profile to fit every camera model
+depth_profile = next(p for p in depth_sensor.profiles if p.is_default())
 
-color_profile = next(p for p in color_sensor.profiles if p.fps() == 30
-                     and p.stream_type() == rs.stream.color
-                     and p.format() == rs.format.yuyv
-                     and p.as_video_stream_profile().width() == 640
-                     and p.as_video_stream_profile().height() == 480)
+if color_sensor:
+    color_profile = next(p for p in color_sensor.profiles if p.is_default())
 
 depth_sensor.open(depth_profile)
 depth_sensor.start(check_depth_frame_drops)
-color_sensor.open(color_profile)
-color_sensor.start(check_color_frame_drops)
+if color_sensor:
+    color_sensor.open(color_profile)
+    color_sensor.start(check_color_frame_drops)
 
 #############################################################################################
 # Test #1
 
-laser_power = rs.option.laser_power
-current_laser_control = 10
-
 test.start("Checking for frame drops when setting laser power several times")
 
-for i in range(1,5):
-   new_value = current_laser_control + 10*i
-   set_new_value(depth_sensor, laser_power, new_value)
+curr_value = depth_sensor.get_option(rs.option.laser_power)
+opt_range = depth_sensor.get_option_range(rs.option.laser_power)
+
+new_value = opt_range.min
+while new_value <= opt_range.max:   
+   set_new_value(depth_sensor, rs.option.laser_power, new_value)
+   new_value += opt_range.step
+
+set_new_value(depth_sensor, rs.option.laser_power, curr_value) # Restore
 
 test.finish()
-
-# reset everything back
-if depth_sensor.supports(rs.option.visual_preset):
-    if product_line == "D400":
-        depth_sensor.set_option(rs.option.visual_preset, int(rs.rs400_visual_preset.default))
-    if product_line == "L500":
-        depth_sensor.set_option(rs.option.visual_preset, int(rs.l500_visual_preset.max_range))
 
 
 #############################################################################################
 
-options_to_ignore = [] 
-
-if product_line == "L500":
-    options_to_ignore = [rs.option.host_performance, rs.option.inter_cam_sync_mode]
+options_to_ignore = []
 
 # ignore reasons:
 # visual_preset       --> frame drops are expected during visual_preset change
@@ -120,15 +116,19 @@ def test_option_changes(sensor):
                 continue
             if sensor.is_option_read_only(option):
                 continue
-            old_value = sensor.get_option(option)
-            range = sensor.get_option_range(option)
-            new_value = range.min
-            if old_value == new_value:
-                new_value = range.max
-            if not log.d(str(option), old_value, '->', new_value):
-                test.info(str(option), new_value, persistent=True)
-            set_new_value(sensor, option, new_value)
-            sensor.set_option(option, old_value)
+            orig_opt_value = sensor.get_option_value(option)
+            if orig_opt_value.type == rs.option_type.integer or orig_opt_value.type == rs.option_type.float:
+                old_value = orig_opt_value.value
+                range = sensor.get_option_range(option)
+                new_value = range.min
+                if old_value == new_value:
+                    new_value = range.max
+                if not log.d(str(option), old_value, '->', new_value):
+                    test.info(str(option), new_value, persistent=True)
+                set_new_value(sensor, option, new_value)
+                sensor.set_option(option, old_value)
+            else:
+                log.d(str(option), "is of", str(orig_opt_value.type), "- skipping.")
         except:
             test.unexpected_exception()
             break
@@ -143,17 +143,20 @@ test_option_changes(depth_sensor)
 test.finish()
 
 #############################################################################################
-time.sleep(0.5)  # jic
-test.start("Checking frame drops when setting options on color")
-test_option_changes( color_sensor )
-test.finish()
+if color_sensor:
+    time.sleep(0.5)  # jic
+    test.start("Checking frame drops when setting options on color")
+    test_option_changes( color_sensor )
+    test.finish()
 
 
 #############################################################################################
 depth_sensor.stop()
 depth_sensor.close()
 
-color_sensor.stop()
-color_sensor.close()
-
+if color_sensor:
+    color_sensor.stop()
+    color_sensor.close()
+    
+tw.stop_wrapper( dev )
 test.print_results_and_exit()

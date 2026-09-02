@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #include "metadata.h"
 #include "backend-hid.h"
@@ -7,6 +7,7 @@
 #include "types.h"
 
 #include <rsutils/string/from.h>
+#include "rsutils/accelerators/gpu.h"
 
 #include <thread>
 #include <chrono>
@@ -56,7 +57,14 @@ namespace librealsense
 
         hid_input::~hid_input()
         {
-            enable(false);
+            try
+            {
+                enable( false );
+            }
+            catch(...)
+            {
+                LOG_DEBUG( "Error while disabling a hid device" );
+            }
         }
 
         // enable scan input. doing so cause the input to be part of the data provided in the polling.
@@ -446,7 +454,7 @@ namespace librealsense
             }
         }
 
-        iio_hid_sensor::iio_hid_sensor(const std::string& device_path, uint32_t frequency)
+        iio_hid_sensor::iio_hid_sensor(const std::string& device_path, uint32_t frequency, float sensitivity)
             : _stop_pipe_fd{},
               _fd(0),
               _iio_device_number(0),
@@ -457,7 +465,7 @@ namespace librealsense
               _is_capturing(false),
               _pm_dispatcher(16)    // queue for async power management commands
         {
-            init(frequency);
+            init(frequency, sensitivity);
         }
 
         iio_hid_sensor::~iio_hid_sensor()
@@ -702,6 +710,21 @@ namespace librealsense
             iio_device_file.close();
         }
 
+        void iio_hid_sensor::set_sensitivity( float sensitivity ) 
+        {
+            auto sensitivity_path = _iio_device_path + "/" + _sensitivity_name;
+            std::ofstream iio_device_file( sensitivity_path );
+
+            if( ! iio_device_file.is_open() )
+            {
+                throw linux_backend_exception( rsutils::string::from()
+                                               << "Failed to set sensitivity " << sensitivity
+                                                                       << ". device path: " << sensitivity_path );
+            }
+            iio_device_file << sensitivity;
+            iio_device_file.close();
+        }
+
         // Asynchronous power management
         void iio_hid_sensor::set_power(bool on)
         {
@@ -731,12 +754,13 @@ namespace librealsense
 
         bool iio_hid_sensor::has_metadata()
         {
-            if(get_output_size() == HID_DATA_ACTUAL_SIZE + HID_METADATA_SIZE)
+            //for FW>=5.16 HID_METADATA_SIZE is 12 
+            if(get_output_size() >= HID_DATA_ACTUAL_SIZE + HID_METADATA_SIZE)
                 return true;
             return false;
         }
 
-        bool iio_hid_sensor::sort_hids(hid_input* first, hid_input* second)
+        bool iio_hid_sensor::sort_hids(std::shared_ptr<hid_input> first, std::shared_ptr<hid_input> second)
         {
             return (second->get_hid_input_info().index >= first->get_hid_input_info().index);
         }
@@ -756,7 +780,7 @@ namespace librealsense
         }
 
         // initialize the device sensor. reading its name and all of its inputs.
-        void iio_hid_sensor::init(uint32_t frequency)
+        void iio_hid_sensor::init(uint32_t frequency, float sensitivity)
         {
             std::ifstream iio_device_file(_iio_device_path + "/name");
 
@@ -815,10 +839,14 @@ namespace librealsense
             // get the specific name of sampling_frequency
             _sampling_frequency_name = get_sampling_frequency_name();
 
+            // get the specific name of sensitivity
+            _sensitivity_name = get_sensitivity_name();
+            
             for (auto& input : _inputs)
                 input->enable(true);
 
             set_frequency(frequency);
+            set_sensitivity( sensitivity );
             write_fs_attribute(_iio_device_path + "/buffer/length", hid_buf_len);
         }
 
@@ -891,6 +919,38 @@ namespace librealsense
             return sampling_frequency_name;
         }
 
+        /*The sensitivity value we need to transfer to FW is stored in a file named with "hysteresis" in its title.
+        Therefore, we are searching for a file that includes "hysteresis" in its name.*/
+        std::string iio_hid_sensor::get_sensitivity_name() const
+        {
+            std::string sensitivity_name = "";
+            DIR * dir = nullptr;
+            struct dirent * dir_ent = nullptr;
+
+            // start enumerate the scan elemnts dir.
+            dir = opendir( _iio_device_path.c_str() );
+            if( dir == nullptr )
+            {
+                throw linux_backend_exception( rsutils::string::from()
+                                               << "Failed to open scan_element " << _iio_device_path );
+            }
+
+            // verify file format. should include in_ (input) and _en (enable).
+            while( ( dir_ent = readdir( dir ) ) != nullptr )
+            {
+                if( dir_ent->d_type != DT_DIR )
+                {
+                    std::string file( dir_ent->d_name );
+                    if( file.find( "hysteresis" ) != std::string::npos )
+                    {
+                        sensitivity_name = file;
+                    }
+                }
+            }
+            closedir( dir );
+            return sensitivity_name;
+        }
+
 
         // read the IIO device inputs.
         void iio_hid_sensor::read_device_inputs()
@@ -920,8 +980,9 @@ namespace librealsense
 
                         try
                         {
-                            auto* new_input = new hid_input(_iio_device_path, file);
+                            auto new_input = std::make_shared<hid_input>(_iio_device_path, file);
                             // push to input list.
+                            
                             _inputs.push_front(new_input);
                         }
                         catch(...)
@@ -954,12 +1015,26 @@ namespace librealsense
         {
             for (auto& elem : _streaming_iio_sensors)
             {
-                elem->stop_capture();
+                try
+                {
+                    elem->stop_capture();
+                }
+                catch(...)
+                {
+                    LOG_DEBUG( "Error while stopping capture sensor" );
+                }
             }
 
             for (auto& elem : _streaming_custom_sensors)
             {
-                elem->stop_capture();
+                try
+                {
+                    elem->stop_capture();
+                }
+                catch(...)
+                {
+                    LOG_DEBUG( "Error while stopping capture sensor" );
+                }
             }
         }
 
@@ -979,11 +1054,13 @@ namespace librealsense
                     else
                     {
                         uint32_t frequency = 0;
+                        float sensitivity = 0;
                         for (auto& profile : hid_profiles)
                         {
                             if (profile.sensor_name == device_info.id)
                             {
                                 frequency = profile.frequency;
+                                sensitivity = profile.sensitivity;
                                 break;
                             }
                         }
@@ -991,7 +1068,7 @@ namespace librealsense
                         if (frequency == 0)
                             continue;
 
-                        auto device = std::unique_ptr<iio_hid_sensor>(new iio_hid_sensor(device_info.device_path, frequency));
+                        auto device = std::unique_ptr<iio_hid_sensor>(new iio_hid_sensor(device_info.device_path, frequency, sensitivity));
                         _iio_hid_sensors.push_back(std::move(device));
                     }
                 }
@@ -1157,23 +1234,26 @@ namespace librealsense
             for (auto& elem : common_sensors)
             {
                 hid_device_info hid_dev_info{};
-                if(!get_hid_device_info(elem.c_str(), hid_dev_info))
+                if (!get_hid_device_info(elem.c_str(), hid_dev_info))
                 {
 #ifdef RS2_USE_CUDA
-                    /* On the Jetson TX, ina3221x is the power monitor (I2C bus)
-                    This code is checking the IIA device directory, but tries to compare as USB HID device
-                    The ina3221x is not a HID device. Check here to avoid spamming the console.
-                    Patch suggested by JetsonHacks: https://github.com/jetsonhacks/buildLibrealsense2TX */
-                    std::string device_path_str(elem.c_str());
-                    device_path_str+="/";
-                    std::string dev_name;
-                    std::ifstream(device_path_str + "name") >> dev_name;
-                    if (dev_name != std::string("ina3221x")) {
-                        LOG_WARNING("Failed to read busnum/devnum. Device Path: " << elem);
+                    if (rsutils::rs2_is_gpu_available())
+                    {
+                        /* On the Jetson TX, ina3221x is the power monitor (I2C bus)
+                        This code is checking the IIA device directory, but tries to compare as USB HID device
+                        The ina3221x is not a HID device. Check here to avoid spamming the console.
+                        Patch suggested by JetsonHacks: https://github.com/jetsonhacks/buildLibrealsense2TX */
+                        std::string device_path_str(elem.c_str());
+                        device_path_str += "/";
+                        std::string dev_name;
+                        std::ifstream(device_path_str + "name") >> dev_name;
+                        if (dev_name != std::string("ina3221x")) {
+                            LOG_WARNING("Failed to read busnum/devnum. Device Path: " << elem);
+                        }
+                        continue;
                     }
-#else
-                    LOG_INFO("Failed to read busnum/devnum. Device Path: " << elem);
 #endif
+                    LOG_INFO("Failed to read busnum/devnum. Device Path: " << elem);
                     continue;
                 }
                 action(hid_dev_info);

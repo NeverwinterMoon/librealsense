@@ -1,30 +1,37 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
-# test:device D400*
-# test:donotrun:!nightly
+# Test multiple set_pu commands checking that the set control event polling works as expected.
+# We expect no exception thrown -  See [RSDSO-17185]
+# Moving bug check to weekly run frequency
+
+# test:device each(D400*)
+# test:device each(D500*)
+# test:donotrun:!weekly
+# test:timeout 600
 
 import pyrealsense2 as rs
 from rspy import test, log
 import time
 import datetime
-
-# Test multiple set_pu commands checking that the set control event polling works as expected.
-# We expect no exception thrown -  See [DSO-17185]
+from rspy import tests_wrapper as tw
 
 test_iterations = 200
 gain_values = [16,74,132,190,248]
 
+dev, _ = test.find_first_device_or_exit()
+time.sleep( 3 ) # The device starts at D0 (Operational) state, allow time for it to get into idle state
+tw.start_wrapper( dev )
+
 ################################################################################################
 test.start("Stress test for setting a PU (gain) option")
 
-dev = test.find_first_device_or_exit()
-time.sleep( 3 ) # The device starts at D0 (Operational) state, allow time for it to get into idle state
 depth_ir_sensor = dev.first_depth_sensor()
 
 # Test only devices that supports set gain option
 if not depth_ir_sensor.supports(rs.option.gain):
     test.finish()
+    tw.stop_wrapper( dev )
     test.print_results_and_exit()
 
 
@@ -54,4 +61,5 @@ for i in range(test_iterations):
 test.finish()
 
 ################################################################################################
+tw.stop_wrapper( dev )
 test.print_results_and_exit()

@@ -1,8 +1,9 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2019 RealSense, Inc. All Rights Reserved.
 
 set(COMMON_SRC
     "${CMAKE_CURRENT_LIST_DIR}/animated.h"
+    "${CMAKE_CURRENT_LIST_DIR}/cli.h"
     "${CMAKE_CURRENT_LIST_DIR}/float2.h"
     "${CMAKE_CURRENT_LIST_DIR}/float3.h"
     "${CMAKE_CURRENT_LIST_DIR}/float4.h"
@@ -28,6 +29,9 @@ set(COMMON_SRC
     "${CMAKE_CURRENT_LIST_DIR}/rs-config.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/os.h"
     "${CMAKE_CURRENT_LIST_DIR}/os.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/bag-conversion-helper.h"
+    "${CMAKE_CURRENT_LIST_DIR}/bag-conversion-helper.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/fw-update-common.h"
     "${CMAKE_CURRENT_LIST_DIR}/fw-update-helper.h"
     "${CMAKE_CURRENT_LIST_DIR}/fw-update-helper.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/metadata-helper.h"
@@ -40,6 +44,8 @@ set(COMMON_SRC
     "${CMAKE_CURRENT_LIST_DIR}/measurement.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/on-chip-calib.h"
     "${CMAKE_CURRENT_LIST_DIR}/on-chip-calib.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/d500-on-chip-calib.h"
+    "${CMAKE_CURRENT_LIST_DIR}/d500-on-chip-calib.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/updates-model.h"
     "${CMAKE_CURRENT_LIST_DIR}/updates-model.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/option-model.h"
@@ -54,6 +60,15 @@ set(COMMON_SRC
     "${CMAKE_CURRENT_LIST_DIR}/stream-model.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/post-processing-filters.h"
     "${CMAKE_CURRENT_LIST_DIR}/post-processing-filters.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/labeled-point-cloud-utilities.h"
+    "${CMAKE_CURRENT_LIST_DIR}/labeled-point-cloud-utilities.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/dds-model.h"
+    "${CMAKE_CURRENT_LIST_DIR}/dds-model.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/hdr-model.h"
+    "${CMAKE_CURRENT_LIST_DIR}/hdr-model.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/embedded-filter-model.h"
+    "${CMAKE_CURRENT_LIST_DIR}/embedded-filter-model.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/textual-icons.h"
     )
 
 set(SW_UPDATE_FILES

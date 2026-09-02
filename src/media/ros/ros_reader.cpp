@@ -1,24 +1,24 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2019-24 RealSense, Inc. All Rights Reserved.
 
-#include <cstring>
 #include "ros_reader.h"
 #include "ds/ds-device-common.h"
 #include "ds/d400/d400-private.h"
-#include "ivcam/sr300.h"
-#include "l500/l500-depth.h"
-#include "proc/disparity-transform.h"
-#include "proc/decimation-filter.h"
-#include "proc/threshold.h" 
-#include "proc/spatial-filter.h"
-#include "proc/temporal-filter.h"
-#include "proc/hole-filling-filter.h"
-#include "proc/zero-order.h"
-#include "proc/hdr-merge.h"
-#include "proc/sequence-id-filter.h"
+#include "ds/d500/d500-private.h"
 #include "std_msgs/Float32MultiArray.h"
+#include <src/depth-sensor.h>
+#include <src/core/pose-frame.h>
+#include <src/core/motion-frame.h>
+#include <src/core/video-frame.h>
+#include <src/color-sensor.h>
+#include <src/safety-sensor.h>
+#include <src/depth-mapping-sensor.h>
+#include <src/points.h>
+#include <src/labeled-points.h>
+#include <src/context.h>
 
 #include <rsutils/string/from.h>
+#include <cstring>
 
 
 namespace librealsense
@@ -397,10 +397,7 @@ namespace librealsense
                 }
                 auto size_of_enum = sizeof(rs2_frame_metadata_value);
                 auto size_of_data = sizeof(rs2_metadata_type);
-                if (total_md_size + size_of_enum + size_of_data > 255)
-                {
-                    continue; //stop adding metadata to frame
-                }
+               
                 memcpy(additional_data.metadata_blob.data() + total_md_size, &type, size_of_enum);
                 total_md_size += static_cast<uint32_t>(size_of_enum);
                 memcpy(additional_data.metadata_blob.data() + total_md_size, &md, size_of_data);
@@ -410,6 +407,7 @@ namespace librealsense
         additional_data.metadata_size = total_md_size;
         return remaining;
     }
+
 
     frame_holder ros_reader::create_image_from_message(const rosbag::MessageInstance &image_data) const
     {
@@ -440,27 +438,50 @@ namespace librealsense
             get_frame_metadata(m_file, info_topic, stream_id, image_data, additional_data);
         }
 
-        frame_interface* frame = m_frame_source->alloc_frame((stream_id.stream_type == RS2_STREAM_DEPTH) ? RS2_EXTENSION_DEPTH_FRAME : RS2_EXTENSION_VIDEO_FRAME,
-            msg->data.size(), additional_data, true);
+        frame_interface * frame = m_frame_source->alloc_frame(
+            { stream_id.stream_type, stream_id.stream_index, frame_source::stream_to_frame_types( stream_id.stream_type ) },
+            msg->data.size(),
+            std::move( additional_data ),
+            true );
+
         if (frame == nullptr)
         {
             LOG_WARNING("Failed to allocate new frame");
             return nullptr;
         }
-        librealsense::video_frame* video_frame = static_cast<librealsense::video_frame*>(frame);
-        video_frame->assign(msg->width, msg->height, msg->step, msg->step / msg->width * 8);
-        rs2_format stream_format;
-        convert(msg->encoding, stream_format);
-        //attaching a temp stream to the frame. Playback sensor should assign the real stream
-        frame->set_stream(std::make_shared<video_stream_profile>(platform::stream_profile{}));
-        frame->get_stream()->set_format(stream_format);
-        frame->get_stream()->set_stream_index(int(stream_id.stream_index));
-        frame->get_stream()->set_stream_type(stream_id.stream_type);
-        video_frame->data = std::move(msg->data);
-        librealsense::frame_holder fh{ video_frame };
-        LOG_DEBUG("Created image frame: " << stream_id << " " << video_frame->get_width() << "x" << video_frame->get_height() << " " << stream_format);
+        if (stream_id.stream_type != RS2_STREAM_LABELED_POINT_CLOUD)
+        {
+            librealsense::video_frame* video_frame = static_cast<librealsense::video_frame*>(frame);
+            video_frame->assign(msg->width, msg->height, msg->step, msg->step / msg->width * 8);
+            rs2_format stream_format;
+            convert(msg->encoding, stream_format);
+            //attaching a temp stream to the frame. Playback sensor should assign the real stream
+            frame->set_stream( std::make_shared< video_stream_profile >() );
+            frame->get_stream()->set_format(stream_format);
+            frame->get_stream()->set_stream_index(int(stream_id.stream_index));
+            frame->get_stream()->set_stream_type(stream_id.stream_type);
+            video_frame->data = std::move(msg->data);
+            librealsense::frame_holder fh{ video_frame };
+            LOG_DEBUG("Created image frame: " << stream_id << " " << video_frame->get_width() << "x" << video_frame->get_height() << " " << stream_format);
 
-        return fh;
+            return fh;
+        }
+        else
+        {
+            librealsense::labeled_points* lab_points = static_cast<librealsense::labeled_points*>(frame);
+            rs2_format stream_format;
+            convert(msg->encoding, stream_format);
+            //attaching a temp stream to the frame. Playback sensor should assign the real stream
+            frame->set_stream( std::make_shared< video_stream_profile >() );
+            frame->get_stream()->set_format(stream_format);
+            frame->get_stream()->set_stream_index(int(stream_id.stream_index));
+            frame->get_stream()->set_stream_type(stream_id.stream_type);
+            lab_points->data = std::move(msg->data);
+            librealsense::frame_holder fh{ lab_points };
+            LOG_DEBUG("Created image frame: " << stream_id << " " << stream_format);
+
+            return fh;
+        }
     }
 
     frame_holder ros_reader::create_motion_sample(const rosbag::MessageInstance &motion_data) const
@@ -490,7 +511,13 @@ namespace librealsense
             get_frame_metadata(m_file, info_topic, stream_id, motion_data, additional_data);
         }
 
-        frame_interface* frame = m_frame_source->alloc_frame(RS2_EXTENSION_MOTION_FRAME, 3 * sizeof(float), additional_data, true);
+        size_t size_of_imu_data = (stream_id.stream_type == RS2_STREAM_MOTION) ? sizeof(rs2_combined_motion) : 3 * sizeof(float);
+
+        frame_interface * frame = m_frame_source->alloc_frame(
+            { stream_id.stream_type, stream_id.stream_index, RS2_EXTENSION_MOTION_FRAME },
+            size_of_imu_data,
+            std::move( additional_data ),
+            true );
         if (frame == nullptr)
         {
             LOG_WARNING("Failed to allocate new frame");
@@ -498,7 +525,7 @@ namespace librealsense
         }
         librealsense::motion_frame* motion_frame = static_cast<librealsense::motion_frame*>(frame);
         //attaching a temp stream to the frame. Playback sensor should assign the real stream
-        frame->set_stream(std::make_shared<motion_stream_profile>(platform::stream_profile{}));
+        frame->set_stream( std::make_shared< motion_stream_profile >() );
         frame->get_stream()->set_format(RS2_FORMAT_MOTION_XYZ32F);
         frame->get_stream()->set_stream_index(stream_id.stream_index);
         frame->get_stream()->set_stream_type(stream_id.stream_type);
@@ -517,6 +544,24 @@ namespace librealsense
             data[1] = static_cast<float>(msg->angular_velocity.y);
             data[2] = static_cast<float>(msg->angular_velocity.z);
             LOG_DEBUG("RS2_STREAM_GYRO " << motion_frame);
+        }
+        else if (stream_id.stream_type == RS2_STREAM_MOTION)
+        {
+            auto data = reinterpret_cast<rs2_combined_motion*>(motion_frame->data.data());
+            // orientation part
+            data->orientation.x = msg->orientation.x;
+            data->orientation.y = msg->orientation.y;
+            data->orientation.z = msg->orientation.z;
+            data->orientation.w = msg->orientation.w;
+            // GYRO part
+            data->angular_velocity.x = msg->angular_velocity.x;
+            data->angular_velocity.y = msg->angular_velocity.y;
+            data->angular_velocity.z = msg->angular_velocity.z;
+            // ACCEL part
+            data->linear_acceleration.x = msg->linear_acceleration.x;
+            data->linear_acceleration.y = msg->linear_acceleration.y;
+            data->linear_acceleration.z = msg->linear_acceleration.z;
+            LOG_DEBUG("RS2_STREAM_MOTION " << motion_frame);
         }
         else
         {
@@ -636,7 +681,12 @@ namespace librealsense
 
         additional_data.timestamp = timestamp_ms.count();
 
-        frame_interface* new_frame = m_frame_source->alloc_frame(frame_type, frame_size, additional_data, true);
+        frame_interface * new_frame = m_frame_source->alloc_frame(
+            { stream_id.stream_type, stream_id.stream_index, frame_type },
+            frame_size,
+            std::move( additional_data ),
+            true );
+
         if (new_frame == nullptr)
         {
             LOG_WARNING("Failed to allocate new frame");
@@ -644,11 +694,11 @@ namespace librealsense
         }
         librealsense::pose_frame* pose_frame = static_cast<librealsense::pose_frame*>(new_frame);
         //attaching a temp stream to the frame. Playback sensor should assign the real stream
-        new_frame->set_stream(std::make_shared<pose_stream_profile>(platform::stream_profile{}));
+        new_frame->set_stream( std::make_shared< pose_stream_profile >() );
         new_frame->get_stream()->set_format(RS2_FORMAT_6DOF);
         new_frame->get_stream()->set_stream_index(int(stream_id.stream_index));
         new_frame->get_stream()->set_stream_type(stream_id.stream_type);
-        byte* data = pose_frame->data.data();
+        uint8_t * data = pose_frame->data.data();
         memcpy(data, &pose, frame_size);
         frame_holder fh{ new_frame };
         LOG_DEBUG("Created new frame " << frame_type);
@@ -778,6 +828,60 @@ namespace librealsense
         return true;
     }
 
+    namespace {
+
+    class depth_sensor_snapshot
+        : public virtual depth_sensor
+        , public extension_snapshot
+    {
+    public:
+        depth_sensor_snapshot( float depth_units )
+            : m_depth_units( depth_units )
+        {
+        }
+        float get_depth_scale() const override { return m_depth_units; }
+
+        void update( std::shared_ptr< extension_snapshot > ext ) override
+        {
+            if( auto api = As< depth_sensor >( ext ) )
+            {
+                m_depth_units = api->get_depth_scale();
+            }
+        }
+
+    protected:
+        float m_depth_units;
+    };
+
+    class depth_stereo_sensor_snapshot
+        : public depth_stereo_sensor
+        , public depth_sensor_snapshot
+    {
+    public:
+        depth_stereo_sensor_snapshot( float depth_units, float stereo_bl_mm )
+            : depth_sensor_snapshot( depth_units )
+            , m_stereo_baseline_mm( stereo_bl_mm )
+        {
+        }
+
+        float get_stereo_baseline_mm() const override { return m_stereo_baseline_mm; }
+
+        void update( std::shared_ptr< extension_snapshot > ext ) override
+        {
+            depth_sensor_snapshot::update( ext );
+
+            if( auto api = As< depth_stereo_sensor >( ext ) )
+            {
+                m_stereo_baseline_mm = api->get_stereo_baseline_mm();
+            }
+        }
+
+    private:
+        float m_stereo_baseline_mm;
+    };
+
+    }  // namespace
+
     void ros_reader::update_sensor_options(const rosbag::Bag& file, uint32_t sensor_index, const nanoseconds& time, uint32_t file_version, snapshot_collection& sensor_extensions, uint32_t version)
     {
         if (version == legacy_file_format::file_version())
@@ -824,30 +928,67 @@ namespace librealsense
         {
             throw invalid_value_exception("Failed to get options interface from sensor snapshots");
         }
-        auto proccesing_blocks = read_proccesing_blocks(file, { get_device_index(), sensor_index }, time, options_api, file_version, pid, sensor_name);
+        auto proccesing_blocks = read_proccesing_blocks( file,
+                                                         { get_device_index(), sensor_index },
+                                                         time,
+                                                         options_api,
+                                                         file_version,
+                                                         pid,
+                                                         sensor_name );
         sensor_extensions[RS2_EXTENSION_RECOMMENDED_FILTERS] = proccesing_blocks;
     }
 
-    ivcam2::intrinsic_depth ros_reader::ros_l500_depth_data_to_intrinsic_depth(ros_reader::l500_depth_data data)
+    namespace {
+
+    class color_sensor_snapshot
+        : public virtual color_sensor
+        , public extension_snapshot
     {
-        ivcam2::intrinsic_depth res;
-        res.orient = { 0, 0, 0, 0, 0.f };
-        res.resolution.num_of_resolutions = data.num_of_resolution;
+    public:
+        void update( std::shared_ptr< extension_snapshot > ext ) override {}
+    };
 
-        for (auto i = 0;i < data.num_of_resolution; i++)
-        {
-            res.resolution.intrinsic_resolution[i].raw.pinhole_cam_model.width = data.data[i].res_raw.x;
-            res.resolution.intrinsic_resolution[i].raw.pinhole_cam_model.height = data.data[i].res_raw.y;
-            res.resolution.intrinsic_resolution[i].raw.zo.x = data.data[i].zo_raw.x;
-            res.resolution.intrinsic_resolution[i].raw.zo.y = data.data[i].zo_raw.y;
+    class motion_sensor_snapshot
+        : public virtual motion_sensor
+        , public extension_snapshot
+    {
+    public:
+        void update( std::shared_ptr< extension_snapshot > ext ) override {}
+    };
 
-            res.resolution.intrinsic_resolution[i].world.pinhole_cam_model.width = data.data[i].res_world.x;
-            res.resolution.intrinsic_resolution[i].world.pinhole_cam_model.height = data.data[i].res_world.y;
-            res.resolution.intrinsic_resolution[i].world.zo.x = data.data[i].zo_world.x;
-            res.resolution.intrinsic_resolution[i].world.zo.y = data.data[i].zo_world.y;
-        }
-        return res;
-    }
+    class fisheye_sensor_snapshot
+        : public virtual fisheye_sensor
+        , public extension_snapshot
+    {
+    public:
+        void update( std::shared_ptr< extension_snapshot > ext ) override {}
+    };
+
+    class safety_sensor_snapshot
+        : public virtual safety_sensor
+        , public extension_snapshot
+    {
+    public:
+        void update(std::shared_ptr< extension_snapshot > ext) override {}
+        std::string get_safety_preset(int index) const override { return ""; }
+        void set_safety_preset(int index, const std::string& sp_json_str) const override {}
+        std::string get_safety_interface_config(rs2_calib_location loc) const override {return ""; };
+        void set_safety_interface_config(const std::string& sic_json_str) const override {};
+        std::string get_application_config() const override { return ""; }
+        void set_application_config(const std::string& application_config_json_str) const override {}
+
+    };
+
+    class depth_mapping_sensor_snapshot
+        : public virtual depth_mapping_sensor
+        , public extension_snapshot
+    {
+    public:
+        void update(std::shared_ptr< extension_snapshot > ext) override {}
+    };
+
+    }  // namespace
+
 
     void ros_reader::add_sensor_extension(snapshot_collection & sensor_extensions, std::string sensor_name)
     {
@@ -855,63 +996,80 @@ namespace librealsense
         {
             sensor_extensions[RS2_EXTENSION_COLOR_SENSOR] = std::make_shared<color_sensor_snapshot>();
         }
-        if (is_motion_module_sensor(sensor_name))
+        else if( is_motion_module_sensor( sensor_name ) )
         {
             sensor_extensions[RS2_EXTENSION_MOTION_SENSOR] = std::make_shared<motion_sensor_snapshot>();
         }
-        if (is_fisheye_module_sensor(sensor_name))
+        else if( is_fisheye_module_sensor( sensor_name ) )
         {
             sensor_extensions[RS2_EXTENSION_FISHEYE_SENSOR] = std::make_shared<fisheye_sensor_snapshot>();
         }
-    }
-
-    void ros_reader::update_l500_depth_sensor(const rosbag::Bag & file, uint32_t sensor_index, const nanoseconds & time, uint32_t file_version, snapshot_collection & sensor_extensions, uint32_t version, std::string pid, std::string sensor_name)
-    {
-        //Taking all messages from the beginning of the bag until the time point requested
-        std::string l500_depth_intrinsics_topic = ros_topic::l500_data_blocks_topic({ get_device_index(), sensor_index });
-
-        rosbag::View option_view(file, rosbag::TopicQuery(l500_depth_intrinsics_topic), to_rostime(get_static_file_info_timestamp()), to_rostime(time));
-        auto it = option_view.begin();
-
-        auto depth_to_disparity = true;
-
-        rosbag::View::iterator last_item;
-
-        while (it != option_view.end())
+        else if( is_depth_sensor( sensor_name ) )
         {
-            last_item = it++;
-            auto l500_intrinsic = create_l500_intrinsic_depth(*last_item);
+            if( sensor_extensions.find( RS2_EXTENSION_DEPTH_SENSOR ) == nullptr )
+            {
+                float depth_units = 0.01f; // Default to 1mm for devices that don't have this option implemented
+                sensor_extensions[RS2_EXTENSION_DEPTH_SENSOR] = std::make_shared< depth_sensor_snapshot >( depth_units );
 
-            sensor_extensions[RS2_EXTENSION_L500_DEPTH_SENSOR] = std::make_shared<l500_depth_sensor_snapshot>(ros_l500_depth_data_to_intrinsic_depth(l500_intrinsic), l500_intrinsic.baseline);
+                if( is_stereo_depth_sensor( sensor_name ) ) // Need both extensions
+                {
+                    if( sensor_extensions.find( RS2_EXTENSION_DEPTH_STEREO_SENSOR ) == nullptr )
+                    {
+                        float baseline = 0.095f; // Default for D555 (and D455 but D400 have baseline option implemented and won't need this)
+                        for( auto & ext : m_extrinsics_map ) // Get real value from extrinsics data, if exists
+                        {
+                            if( ext.first.stream_type == RS2_STREAM_INFRARED && ext.first.stream_index == 2 )
+                                baseline = ext.second.second.translation[0];
+                        }
+                        sensor_extensions[RS2_EXTENSION_DEPTH_STEREO_SENSOR] = std::make_shared< depth_stereo_sensor_snapshot >( depth_units, baseline );
+                    }
+                }
+            }
+        }
+        else if (is_safety_module_sensor(sensor_name))
+        {
+            sensor_extensions[RS2_EXTENSION_SAFETY_SENSOR] = std::make_shared<safety_sensor_snapshot>();
+        }
+        else if (is_depth_mapping_sensor(sensor_name))
+        {
+            sensor_extensions[RS2_EXTENSION_DEPTH_MAPPING_SENSOR] = std::make_shared<depth_mapping_sensor_snapshot>();
         }
     }
 
-    bool ros_reader::is_depth_sensor(std::string sensor_name)
+
+    bool ros_reader::is_depth_sensor(const std::string& sensor_name)
     {
-        if (sensor_name.compare("Stereo Module") == 0 || sensor_name.compare("Coded-Light Depth Sensor") == 0)
-            return true;
-        return false;
+        return (sensor_name.compare("Stereo Module") == 0 || sensor_name.compare("Coded-Light Depth Sensor") == 0);
     }
 
-    bool ros_reader::is_color_sensor(std::string sensor_name)
+    bool ros_reader::is_stereo_depth_sensor( std::string sensor_name )
     {
-        if (sensor_name.compare("RGB Camera") == 0)
-            return true;
-        return false;
+        return sensor_name.compare( "Stereo Module" ) == 0;
     }
 
-    bool ros_reader::is_motion_module_sensor(std::string sensor_name)
+    bool ros_reader::is_color_sensor(const std::string& sensor_name)
     {
-        if (sensor_name.compare("Motion Module") == 0)
-            return true;
-        return false;
+        return sensor_name.compare( "RGB Camera" ) == 0;
     }
 
-    bool ros_reader::is_fisheye_module_sensor(std::string sensor_name)
+    bool ros_reader::is_motion_module_sensor(const std::string& sensor_name)
     {
-        if (sensor_name.compare("Wide FOV Camera") == 0)
-            return true;
-        return false;
+        return (sensor_name.compare("Motion Module") == 0);
+    }
+
+    bool ros_reader::is_fisheye_module_sensor(const std::string& sensor_name)
+    {
+        return (sensor_name.compare("Wide FOV Camera") == 0);
+    }
+
+    bool ros_reader::is_safety_module_sensor(const std::string& sensor_name)
+    {
+        return (sensor_name.compare("Safety Camera") == 0);
+    }
+
+    bool ros_reader::is_depth_mapping_sensor(const std::string& sensor_name)
+    {
+        return (sensor_name.compare("Depth Mapping Camera") == 0);
     }
 
     bool ros_reader::is_ds_PID(int pid)
@@ -923,30 +1081,15 @@ namespace librealsense
             return pid == d400_pid;
         });
 
-        return it5 != rs400_sku_pid.end();
-    }
+        if (it5 != rs400_sku_pid.end())
+            return true;
 
-    bool ros_reader::is_sr300_PID(int pid)
-    {
-        std::vector<int> sr300_PIDs =
-        {
-            SR300_PID,
-            SR300v2_PID,
-            SR306_PID,
-            SR306_PID_DBG
-        };
+        auto it6 = std::find_if(rs500_sku_pid.begin(), rs500_sku_pid.end(), [&](int d500_pid)
+            {
+                return pid == d500_pid;
+            });
 
-        auto it = std::find_if(sr300_PIDs.begin(), sr300_PIDs.end(), [&](int sr300_pid)
-        {
-            return pid == sr300_pid;
-        });
-
-        return it != sr300_PIDs.end();
-    }
-
-    bool ros_reader::is_l500_PID(int pid)
-    {
-        return pid == L500_PID;
+        return it6 != rs500_sku_pid.end();
     }
 
     std::shared_ptr<recommended_proccesing_blocks_snapshot> ros_reader::read_proccesing_blocks_for_version_under_4(std::string pid, std::string sensor_name, std::shared_ptr<options_interface> options)
@@ -973,33 +1116,18 @@ namespace librealsense
             throw io_exception("Unrecognized sensor name" + sensor_name);
         }
 
-        if (is_sr300_PID(int_pid))
-        {
-            if (is_depth_sensor(sensor_name))
-            {
-                return std::make_shared<recommended_proccesing_blocks_snapshot>(sr300_camera::sr300_depth_sensor::get_sr300_depth_recommended_proccesing_blocks());
-            }
-            else if (is_color_sensor(sensor_name))
-            {
-                return std::make_shared<recommended_proccesing_blocks_snapshot>(get_color_recommended_proccesing_blocks());
-            }
-            throw io_exception("Unrecognized sensor name");
-        }
-
-        if (is_l500_PID(int_pid))
-        {
-            if (is_depth_sensor(sensor_name))
-            {
-                return std::make_shared<recommended_proccesing_blocks_snapshot>(l500_depth_sensor::get_l500_recommended_proccesing_blocks());
-            }
-            throw io_exception("Unrecognized sensor name");
-        }
         //Unrecognized sensor
         return std::make_shared<recommended_proccesing_blocks_snapshot>(processing_blocks{});
     }
 
-    std::shared_ptr<recommended_proccesing_blocks_snapshot> ros_reader::read_proccesing_blocks(const rosbag::Bag& file, device_serializer::sensor_identifier sensor_id, const nanoseconds& timestamp,
-        std::shared_ptr<options_interface> options, uint32_t file_version, std::string pid, std::string sensor_name)
+    std::shared_ptr< recommended_proccesing_blocks_snapshot >
+    ros_reader::read_proccesing_blocks( const rosbag::Bag & file,
+                                        device_serializer::sensor_identifier sensor_id,
+                                        const nanoseconds & timestamp,
+                                        std::shared_ptr< options_interface > options,
+                                        uint32_t file_version,
+                                        std::string pid,
+                                        std::string sensor_name )
     {
         processing_blocks blocks;
         std::shared_ptr<recommended_proccesing_blocks_snapshot> res;
@@ -1023,8 +1151,8 @@ namespace librealsense
                 last_item = it++;
 
                 auto block = create_processing_block(*last_item, depth_to_disparity, options);
-                assert(block);
-                blocks.push_back(block);
+                if( block )
+                    blocks.push_back(block);
             }
 
             res = std::make_shared<recommended_proccesing_blocks_snapshot>(blocks);
@@ -1045,7 +1173,7 @@ namespace librealsense
 
                 std::vector<sensor_snapshot> sensor_descriptions;
                 auto sensor_indices = read_sensor_indices(get_device_index());
-                std::map<stream_identifier, std::pair<uint32_t, rs2_extrinsics>> extrinsics_map;
+                m_extrinsics_map.clear();
 
                 for (auto sensor_index : sensor_indices)
                 {
@@ -1058,7 +1186,7 @@ namespace librealsense
                         rs2_extrinsics stream_extrinsic;
                         if (try_read_stream_extrinsic(stream_id, reference_id, stream_extrinsic))
                         {
-                            extrinsics_map[stream_id] = std::make_pair(reference_id, stream_extrinsic);
+                            m_extrinsics_map[stream_id] = std::make_pair(reference_id, stream_extrinsic);
                         }
                     }
 
@@ -1087,12 +1215,11 @@ namespace librealsense
 
                     add_sensor_extension(sensor_extensions, sensor_name);
                     update_proccesing_blocks(m_file, sensor_index, time, m_version, sensor_extensions, m_version, pid, sensor_name);
-                    update_l500_depth_sensor(m_file, sensor_index, time, m_version, sensor_extensions, m_version, pid, sensor_name);
 
                     sensor_descriptions.emplace_back(sensor_index, sensor_extensions, streams_snapshots);
                 }
 
-                m_initial_device_description = device_snapshot(device_extensions, sensor_descriptions, extrinsics_map);
+                m_initial_device_description = device_snapshot(device_extensions, sensor_descriptions, m_extrinsics_map);
             }
             return m_initial_device_description;
         }
@@ -1200,7 +1327,7 @@ namespace librealsense
     std::shared_ptr<pose_stream_profile> ros_reader::create_pose_profile(uint32_t stream_index, uint32_t fps)
     {
         rs2_format format = RS2_FORMAT_6DOF;
-        auto profile = std::make_shared<pose_stream_profile>(platform::stream_profile{ 0, 0, fps, static_cast<uint32_t>(format) });
+        auto profile = std::make_shared< pose_stream_profile >();
         profile->set_stream_index(stream_index);
         profile->set_stream_type(RS2_STREAM_POSE);
         profile->set_format(format);
@@ -1210,7 +1337,7 @@ namespace librealsense
 
     std::shared_ptr<motion_stream_profile> ros_reader::create_motion_stream(rs2_stream stream_type, uint32_t stream_index, uint32_t fps, rs2_format format, rs2_motion_device_intrinsic intrinsics)
     {
-        auto profile = std::make_shared<motion_stream_profile>(platform::stream_profile{ 0, 0, fps, static_cast<uint32_t>(format) });
+        auto profile = std::make_shared< motion_stream_profile >();
         profile->set_stream_index(stream_index);
         profile->set_stream_type(stream_type);
         profile->set_format(format);
@@ -1223,7 +1350,7 @@ namespace librealsense
         const sensor_msgs::CameraInfo& ci,
         const stream_descriptor& sd)
     {
-        auto profile = std::make_shared<video_stream_profile>(sp);
+        auto profile = std::make_shared<video_stream_profile>();
         rs2_intrinsics intrinsics{};
         intrinsics.height = ci.height;
         intrinsics.width = ci.width;
@@ -1331,7 +1458,8 @@ namespace librealsense
         }
         stream_profiles streams;
         //The below regex matches both stream info messages and also video \ imu stream info (both have the same prefix)
-        rosbag::View stream_infos_view(m_file, RegexTopicQuery("/device_" + std::to_string(device_index) + "/sensor_" + std::to_string(sensor_index) + R"RRR(/(\w)+_(\d)+/info)RRR"));
+        auto regex_const_char = R"RRR(/([a-zA-Z0-9_ ])+_(\d)+/info)RRR";
+        rosbag::View stream_infos_view(m_file, RegexTopicQuery("/device_" + std::to_string(device_index) + "/sensor_" + std::to_string(sensor_index) + regex_const_char));
         for (auto infos_view : stream_infos_view)
         {
             if (infos_view.isType<realsense_msgs::StreamInfo>() == false)
@@ -1431,49 +1559,35 @@ namespace librealsense
         return std::make_pair(id, std::make_shared<const_value_option>(description, value));
     }
 
-    std::shared_ptr<librealsense::processing_block_interface> ros_reader::create_processing_block(const rosbag::MessageInstance& value_message_instance, bool& depth_to_disparity, std::shared_ptr<options_interface> options)
+    std::shared_ptr< librealsense::processing_block_interface >
+    ros_reader::create_processing_block( const rosbag::MessageInstance & value_message_instance,
+                                         bool & depth_to_disparity,
+                                         std::shared_ptr< options_interface > sensor_options )
     {
         auto processing_block_msg = instantiate_msg<std_msgs::String>(value_message_instance);
-        rs2_extension id;
-        convert(processing_block_msg->data, id);
-        std::shared_ptr<librealsense::processing_block_interface> disparity;
-
-        switch (id)
+        std::string name = processing_block_msg->data;
+        if( name == "Disparity Filter" )
         {
-        case RS2_EXTENSION_DECIMATION_FILTER:
-            return std::make_shared<ExtensionToType<RS2_EXTENSION_DECIMATION_FILTER>::type>();
-        case RS2_EXTENSION_THRESHOLD_FILTER:
-            return std::make_shared<ExtensionToType<RS2_EXTENSION_THRESHOLD_FILTER>::type>();
-        case RS2_EXTENSION_DISPARITY_FILTER:
-            disparity = std::make_shared<ExtensionToType<RS2_EXTENSION_DISPARITY_FILTER>::type>(depth_to_disparity);
-            depth_to_disparity = false;
-            return disparity;
-        case RS2_EXTENSION_SPATIAL_FILTER:
-            return std::make_shared<ExtensionToType<RS2_EXTENSION_SPATIAL_FILTER>::type>();
-        case RS2_EXTENSION_TEMPORAL_FILTER:
-            return std::make_shared<ExtensionToType<RS2_EXTENSION_TEMPORAL_FILTER>::type>();
-        case RS2_EXTENSION_HOLE_FILLING_FILTER:
-            return std::make_shared<ExtensionToType<RS2_EXTENSION_HOLE_FILLING_FILTER>::type>();
-        case RS2_EXTENSION_ZERO_ORDER_FILTER:
-            return std::make_shared<ExtensionToType<RS2_EXTENSION_ZERO_ORDER_FILTER>::type>();
-        case RS2_EXTENSION_HDR_MERGE:
-            return std::make_shared<ExtensionToType<RS2_EXTENSION_HDR_MERGE>::type>();
-        case RS2_EXTENSION_SEQUENCE_ID_FILTER:
-            return std::make_shared<ExtensionToType<RS2_EXTENSION_SEQUENCE_ID_FILTER>::type>();
-        default:
-            return nullptr;
+            // What was recorded was the extension type (without its settings!), but we need to create different
+            // variants. "Disparity Filter" gets recorded twice! This workaround ensures it's instantiated in its
+            // non-default flavor the second time:
+            if( depth_to_disparity )
+                depth_to_disparity = false;
+            else
+                name = "Disparity to Depth";
         }
-    }
-
-    ros_reader::l500_depth_data ros_reader::create_l500_intrinsic_depth(const rosbag::MessageInstance & value_message_instance)
-    {
-        ros_reader::l500_depth_data res;
-
-        auto intrinsic_msg = instantiate_msg<std_msgs::Float32MultiArray>(value_message_instance);
-
-        res = *(ros_reader::l500_depth_data*)intrinsic_msg->data.data();
-
-        return res;
+        try
+        {
+            auto block = m_context->create_pp_block( name, {} );
+            if( ! block )
+                LOG_DEBUG( "unknown processing block '" << name << "'; ignored" );
+            return block;
+        }
+        catch( std::exception const & e )
+        {
+            LOG_DEBUG( "failed to create processing block '" << name << "': " << e.what() );
+            return {};
+        }
     }
 
     notification ros_reader::create_notification(const rosbag::Bag& file, const rosbag::MessageInstance& message_instance)

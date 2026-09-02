@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -12,8 +12,7 @@ namespace librealsense
     class d400_active : public virtual d400_device
     {
     public:
-        d400_active(std::shared_ptr<context> ctx,
-                   const platform::backend_device_group& group);
+        d400_active( std::shared_ptr< const d400_info > const & );
     private:
         std::shared_ptr<ds_active_common> _ds_active_common;
     };

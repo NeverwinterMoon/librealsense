@@ -1,5 +1,5 @@
 ## License: Apache 2.0. See LICENSE file in root directory.
-## Copyright(c) 2015-2017 Intel Corporation. All Rights Reserved.
+## Copyright(c) 2015-2017 RealSense, Inc. All Rights Reserved.
 
 ###############################################
 ##      Open CV and Numpy integration        ##
@@ -29,11 +29,7 @@ if not found_rgb:
     exit(0)
 
 config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-
-if device_product_line == 'L500':
-    config.enable_stream(rs.stream.color, 960, 540, rs.format.bgr8, 30)
-else:
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
 # Start streaming
 pipeline.start(config)

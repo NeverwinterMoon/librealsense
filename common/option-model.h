@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 #include <librealsense2/rs.hpp>
@@ -23,26 +23,33 @@ namespace rs2
         bool draw_option( bool update_read_only_options, bool is_streaming,
             std::string& error_message, notifications_model& model );
 
+        std::vector< const char * > get_combo_labels( int * p_selected = nullptr ) const;
+        std::string value_as_string() const;
+        float value_as_float() const;
+
+        void update_value( const rs2::option_value & updated_value, notifications_model & model );
+
         rs2_option opt;
         option_range range;
         std::shared_ptr<options> endpoint;
         float unset_value = 0;
         bool have_unset_value = false;
         rsutils::time::stopwatch last_set_stopwatch;
+        rsutils::time::stopwatch last_slider_hold_stopwatch;
         bool* invalidate_flag = nullptr;
         bool supported = false;
         bool read_only = false;
-        float value = 0.0f;
-        std::string label = "";
-        std::string id = "";
+        rs2::option_value value;
+        std::string label;
+        std::string id;
         subdevice_model* dev;
         std::function<bool( option_model&, std::string&, notifications_model& )> custom_draw_method = nullptr;
         bool edit_mode = false;
-        std::string edit_value = "";
-    private:
+        std::string edit_value;
         bool is_all_integers() const;
         bool is_enum() const;
         bool is_checkbox() const;
+    private:
         bool draw_checkbox( notifications_model& model, std::string& error_message, const char* description );
         bool draw_combobox( notifications_model& model, std::string& error_message, const char* description, bool new_line, bool use_option_name );
         bool draw_slider( notifications_model& model, std::string& error_message, const char* description, bool use_cm_units );
@@ -59,7 +66,7 @@ namespace rs2
         std::string adjust_description( const std::string& str_in, const std::string& to_be_replaced, const std::string& to_replace );
     };
 
-    option_model create_option_model(rs2_option opt,
+    option_model create_option_model(option_value const & opt,
         const std::string& opt_base_label,
         subdevice_model* model,
         std::shared_ptr<options> options,

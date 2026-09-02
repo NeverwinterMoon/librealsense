@@ -1,11 +1,14 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
 #include "ds-device-common.h"
 #include <rsutils/string/from.h>
 #include "ds-calib-parsers.h"
+
+#include <rsutils/lazy.h>
+
 
 namespace librealsense
 {
@@ -62,7 +65,7 @@ namespace librealsense
     class ds_fisheye_sensor : public synthetic_sensor, public video_sensor_interface, public roi_sensor_base, public fisheye_sensor
     {
     public:
-        explicit ds_fisheye_sensor(std::shared_ptr<sensor_base> sensor, device* owner);
+        explicit ds_fisheye_sensor( std::shared_ptr< raw_sensor_base > const & sensor, device * owner );
 
         rs2_intrinsics get_intrinsics(const stream_profile& profile) const override;
         stream_profiles init_stream_profiles() override;
@@ -79,13 +82,15 @@ namespace librealsense
                           public motion_sensor
     {
     public:
-        explicit ds_motion_sensor(std::string name,
-            std::shared_ptr<sensor_base> sensor, device* owner);
+        explicit ds_motion_sensor( std::string const & name,
+                                   std::shared_ptr< raw_sensor_base > const & sensor,
+                                   device * owner );
 
-        explicit ds_motion_sensor(std::string name,
-            std::shared_ptr<sensor_base> sensor, device* owner,
-            const std::map<uint32_t, rs2_format>& motion_fourcc_to_rs2_format,
-            const std::map<uint32_t, rs2_stream>& motion_fourcc_to_rs2_stream);
+        explicit ds_motion_sensor( std::string const & name,
+                                   std::shared_ptr< raw_sensor_base > const & sensor,
+                                   device * owner,
+                                   const std::map< uint32_t, rs2_format > & motion_fourcc_to_rs2_format,
+                                   const std::map< uint32_t, rs2_stream > & motion_fourcc_to_rs2_stream );
 
         rs2_motion_device_intrinsic get_motion_intrinsics(rs2_stream stream) const;
 
@@ -100,14 +105,22 @@ namespace librealsense
 
     class global_time_option;
     class time_diff_keeper;
+    namespace platform {
+        struct uvc_device_info;
+        struct hid_device_info;
+        struct backend_device_group;
+    }
+
+    class context;
+    class backend_device;
 
     class ds_motion_common
     {
     public:
-        ds_motion_common(device* owner,
-            firmware_version fw_version,
-            const ds::ds_caps& device_capabilities,
-            std::shared_ptr<hw_monitor> hwm);
+        ds_motion_common( backend_device * owner,
+                          firmware_version fw_version,
+                          const ds::ds_caps& device_capabilities,
+                          std::shared_ptr<hw_monitor> hwm);
 
         rs2_motion_device_intrinsic get_motion_intrinsics(rs2_stream) const;
 
@@ -122,9 +135,8 @@ namespace librealsense
         void register_fisheye_metadata();
 
         std::shared_ptr<synthetic_sensor> create_hid_device(std::shared_ptr<context> ctx,
-            const std::vector<platform::hid_device_info>& all_hid_infos,
-            const firmware_version& camera_fw_version,
-            std::shared_ptr<time_diff_keeper> tf_keeper);
+                                                            const std::vector<platform::hid_device_info>& all_hid_infos,
+                                                            std::shared_ptr<time_diff_keeper> tf_keeper);
 
         void init_motion(bool is_infos_empty, const stream_interface& depth_stream);
 
@@ -141,6 +153,8 @@ namespace librealsense
         inline std::shared_ptr<stream_interface> get_accel_stream() const { return _accel_stream; }
         inline std::shared_ptr<stream_interface> get_gyro_stream() const { return _gyro_stream; }
 
+        inline std::shared_ptr<mm_calib_handler> get_calib_handler() const {return _mm_calib;}
+
     private:
         std::shared_ptr<auto_exposure_mechanism> register_auto_exposure_options(synthetic_sensor* ep,
             const platform::extension_unit* fisheye_xu);
@@ -152,21 +166,21 @@ namespace librealsense
         friend class ds_motion_sensor;
         friend class ds_fisheye_sensor;
 
-        device* _owner;
+        backend_device * _owner;
         firmware_version _fw_version;
         ds::ds_caps _device_capabilities;
         std::shared_ptr<hw_monitor> _hw_monitor;
 
         std::shared_ptr<mm_calib_handler> _mm_calib;
-        lazy<std::vector<uint8_t>> _fisheye_calibration_table_raw;
+        rsutils::lazy< std::vector< uint8_t > > _fisheye_calibration_table_raw;
 
         std::shared_ptr<stream_interface> _fisheye_stream;
         std::shared_ptr<stream_interface> _accel_stream;
         std::shared_ptr<stream_interface> _gyro_stream;
 
-        std::shared_ptr<lazy<ds::imu_intrinsic>> _accel_intrinsic;
-        std::shared_ptr<lazy<ds::imu_intrinsic>> _gyro_intrinsic;
-        std::shared_ptr<lazy<rs2_extrinsics>> _depth_to_imu; // Mechanical installation pose
+        std::shared_ptr< rsutils::lazy< ds::imu_intrinsic > > _accel_intrinsic;
+        std::shared_ptr< rsutils::lazy< ds::imu_intrinsic > > _gyro_intrinsic;
+        std::shared_ptr< rsutils::lazy< rs2_extrinsics > > _depth_to_imu;  // Mechanical installation pose
 
         std::shared_ptr<uvc_sensor> _raw_fisheye_ep;
         std::shared_ptr<synthetic_sensor> _fisheye_ep;

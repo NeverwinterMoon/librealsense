@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
 #include <librealsense2/hpp/rs_internal.hpp>
@@ -53,6 +53,7 @@ public:
                 }
             }
         color_frame.frame = std::move(pixels_color);
+        stbi_image_free( realsense_logo );
     }
 
     synthetic_frame& get_synthetic_texture()

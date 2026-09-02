@@ -1,5 +1,5 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2023 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2023 RealSense, Inc. All Rights Reserved.
 
 import pyrealsense2 as rs
 from rspy import log, test
@@ -10,7 +10,7 @@ fps = 30
 w = 640
 h = 480
 bpp = 2  # bytes
-pixels = bytearray( b'\x00' * ( w * h * bpp ))  # Dummy data
+pixels = bytearray( b'\x69' * ( w * h * bpp ))  # Dummy data
 domain = rs.timestamp_domain.hardware_clock     # For either depth/color
 
 global_frame_number = 0
@@ -63,6 +63,18 @@ class sensor:
 
     def set( self, key:rs.frame_metadata_value, value ):
         self._handle.set_metadata( key, value )
+
+    def add_option( self, option:rs.option, option_range, writable=True ):
+        self._handle.add_option( option, option_range, writable )
+
+    def supports( self, option:rs.option ):
+        return self._handle.supports( option )
+
+    def get_option( self, option:rs.option ):
+        return self._handle.get_option( option )
+
+    def set_option( self, option:rs.option, value ):
+        self._handle.set_option( option, value )
 
     def publish( self, frame ):
         if str(frame.profile) not in self._profiles_str:

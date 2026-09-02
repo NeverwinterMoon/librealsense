@@ -1,12 +1,14 @@
 /* License: Apache 2.0. See LICENSE file in root directory. */
-/* Copyright(c) 2019 Intel Corporation. All Rights Reserved. */
+/* Copyright(c) 2019 RealSense, Inc. All Rights Reserved. */
 #pragma once
 
-#include "../types.h"
-#include "../backend.h"
-#include "../usb/usb-device.h"
+#include "../platform/device-watcher.h"
+#include "../platform/backend-device-group.h"
+#include "../platform/uvc-device-info.h"
 
 #include <memory>
+#include <mutex>
+#include <vector>
 
 namespace librealsense
 {

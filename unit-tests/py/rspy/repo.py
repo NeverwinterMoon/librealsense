@@ -1,5 +1,5 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 import os, platform
 from rspy import log
@@ -22,9 +22,12 @@ if not os.path.isdir( build ):
     #
     build = os.path.join( root, 'build' )
     if not os.path.isdir( build ):
-        log.w( 'repo.build directory wasn\'t found' )
-        log.d( 'repo.root=', root )
-        build = None
+        # Under GHA, we use a build directory under this env variable:
+        build = os.environ.get( 'WIN_BUILD_DIR' )
+        if not build or not os.path.isdir( build ):
+            log.w( 'repo.build directory wasn\'t found' )
+            log.d( 'repo.root=', root )
+            build = None
 
 
 def find_pyrs():
@@ -36,10 +39,10 @@ def find_pyrs():
         return None
     from rspy import file
     if platform.system() == 'Linux':
-        for so in file.find( build, '(^|/)pyrealsense2.*\.so$' ):
+        for so in file.find( build, r'(^|/)pyrealsense2.*\.so$' ):
             return os.path.join( build, so )
     else:
-        for pyd in file.find( build, '(^|/)pyrealsense2.*\.pyd$' ):
+        for pyd in file.find( build, r'(^|/)pyrealsense2.*\.pyd$' ):
             return os.path.join( build, pyd )
 
 

@@ -2,7 +2,7 @@
 
 This document contains recipes for using the SDK in C#.
 
-Following samples are ports of the C++ [API-How-To](https://github.com/IntelRealSense/librealsense/wiki/API-How-To) as well as some C# specific features & gotchas.
+Following samples are ports of the C++ [API-How-To](https://github.com/realsenseai/librealsense/wiki/API-How-To) as well as some C# specific features & gotchas.
 
 > You can use the [dotnet-script](https://github.com/filipw/dotnet-script) tool to run these snippets, with 2 prerequisites:
 >
@@ -281,7 +281,8 @@ pipe.Start();
 
 using (var frames = pipe.WaitForFrames())
 using (var depth = frames.DepthFrame)
-using (var points = pc.Process(depth).As<Points>())
+using (var pc_frame = pc.Process(depth))
+using (var points = pc_frame.As<Points>())
 {
     // CopyVertices is extensible, any of these will do:
     var vertices = new float[points.Count * 3];

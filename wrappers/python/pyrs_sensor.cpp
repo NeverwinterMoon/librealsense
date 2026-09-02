@@ -1,9 +1,9 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 #include "pyrealsense2.h"
 #include <librealsense2/hpp/rs_sensor.hpp>
-#include "calibrated-sensor.h"
+#include <librealsense2/hpp/rs_safety_sensor.hpp>
 #include "max-usable-range-sensor.h"
 
 void init_sensor(py::module &m) {
@@ -36,7 +36,11 @@ void init_sensor(py::module &m) {
 
     // not binding notifications_callback, templated
 
-    py::class_<rs2::sensor, rs2::options> sensor(m, "sensor"); // No docstring in C++
+    // rs2::sensor destructor calls functions that might wait for Python callbacks to finish (e.g. dispatcher::stop)
+    // Those callbacks need to hold the GIL so the py_holder releases our hold of the GIL to let them run.
+    // Not releasing the GIL might lead to a deadlock (in certain scenario/timing).
+    // Note - sensor inheritors need to use py_holder as well.
+    py::class_<rs2::sensor, rs2::options, py_holder<rs2::sensor>> sensor(m, "sensor"); // No docstring in C++
     sensor.def("open", (void (rs2::sensor::*)(const rs2::stream_profile&) const) &rs2::sensor::open,
                "Open sensor for exclusive access, by commiting to a configuration", "profile"_a, py::call_guard<py::gil_scoped_release>())
         .def("supports", (bool (rs2::sensor::*)(rs2_camera_info) const) &rs2::sensor::supports,
@@ -46,26 +50,41 @@ void init_sensor(py::module &m) {
         .def("get_info", &rs2::sensor::get_info, "Retrieve camera specific information, "
              "like versions of various internal components.", "info"_a)
         .def("set_notifications_callback", [](const rs2::sensor& self, std::function<void(rs2::notification)> callback) {
-            self.set_notifications_callback(callback);
-        }, "Register Notifications callback", "callback"_a)
+            self.set_notifications_callback(std::move(callback));
+        }, "Register Notifications callback", "callback"_a, py::call_guard<py::gil_scoped_release>())
         .def("open", (void (rs2::sensor::*)(const std::vector<rs2::stream_profile>&) const) &rs2::sensor::open,
              "Open sensor for exclusive access, by committing to a composite configuration, specifying one or "
              "more stream profiles.", "profiles"_a, py::call_guard<py::gil_scoped_release>())
         .def("close", &rs2::sensor::close, "Close sensor for exclusive access.", py::call_guard<py::gil_scoped_release>())
         .def("start", [](const rs2::sensor& self, std::function<void(rs2::frame)> callback) {
-            self.start(callback);
-        }, "Start passing frames into user provided callback.", "callback"_a)
+            self.start(std::move(callback));
+        }, "Start passing frames into user provided callback.", "callback"_a,py::call_guard< py::gil_scoped_release >())
         .def("start", [](const rs2::sensor& self, rs2::syncer& syncer) {
             self.start(syncer);
-        }, "Start passing frames into user provided syncer.", "syncer"_a)
+        }, "Start passing frames into user provided syncer.", "syncer"_a, py::call_guard< py::gil_scoped_release >())
         .def("start", [](const rs2::sensor& self, rs2::frame_queue& queue) {
             self.start(queue);
-        }, "start passing frames into specified frame_queue", "queue"_a)
+        }, "start passing frames into specified frame_queue", "queue"_a, py::call_guard< py::gil_scoped_release >())
         .def("stop", &rs2::sensor::stop, "Stop streaming.", py::call_guard<py::gil_scoped_release>())
         .def("get_stream_profiles", &rs2::sensor::get_stream_profiles, "Retrieves the list of stream profiles supported by the sensor.")
         .def("get_active_streams", &rs2::sensor::get_active_streams, "Retrieves the list of stream profiles currently streaming on the sensor.")
         .def_property_readonly("profiles", &rs2::sensor::get_stream_profiles, "The list of stream profiles supported by the sensor. Identical to calling get_stream_profiles")
         .def("get_recommended_filters", &rs2::sensor::get_recommended_filters, "Return the recommended list of filters by the sensor.")
+		.def("query_embedded_filters", &rs2::sensor::query_embedded_filters, "Return the list of embedded filters in the sensor.")
+        .def("get_embedded_filter", [](const rs2::sensor& self, rs2_embedded_filter_type filter_type) {
+            switch (filter_type) {
+                case RS2_EMBEDDED_FILTER_TYPE_DECIMATION:
+                    return rs2::embedded_filter(self.get_embedded_filter<rs2::embedded_decimation_filter>());
+                case RS2_EMBEDDED_FILTER_TYPE_TEMPORAL:
+                    return rs2::embedded_filter(self.get_embedded_filter<rs2::embedded_temporal_filter>());
+                default:
+                    throw std::runtime_error("Unsupported embedded filter type");
+            }
+        }, "Return the embedded filter in the sensor by filter type.", "filter_type"_a)
+        .def("get_embedded_decimation_filter", &rs2::sensor::get_embedded_filter<rs2::embedded_decimation_filter>, 
+             "Return the embedded decimation filter in the sensor.")
+        .def("get_embedded_temporal_filter", &rs2::sensor::get_embedded_filter<rs2::embedded_temporal_filter>, 
+             "Return the embedded temporal filter in the sensor.")
         .def(py::init<>())
         .def("__nonzero__", &rs2::sensor::operator bool) // Called to implement truth value testing in Python 2
         .def("__bool__", &rs2::sensor::operator bool)    // Called to implement truth value testing in Python 3
@@ -74,8 +93,8 @@ void init_sensor(py::module &m) {
         .def(BIND_DOWNCAST(sensor, color_sensor))
         .def(BIND_DOWNCAST(sensor, motion_sensor))
         .def(BIND_DOWNCAST(sensor, fisheye_sensor))
+        .def(BIND_DOWNCAST(sensor, safety_sensor))
         .def(BIND_DOWNCAST(sensor, pose_sensor))
-        .def(BIND_DOWNCAST(sensor, calibrated_sensor))
         .def(BIND_DOWNCAST(sensor, wheel_odometer))
         .def(BIND_DOWNCAST(sensor, max_usable_range_sensor))
         .def(BIND_DOWNCAST(sensor, debug_stream_sensor))
@@ -93,68 +112,61 @@ void init_sensor(py::module &m) {
                 ss << ": \"" << self.get_info( RS2_CAMERA_INFO_NAME ) << "\"";
             ss << ">";
             return ss.str();
-        } );
-    // rs2::sensor_from_frame [frame.def("get_sensor", ...)?
-    // rs2::sensor==sensor?
+        } )
+        .def_static("from_frame", [](rs2::frame frame) {
+            auto sptr = rs2::sensor_from_frame(frame);
+            return *sptr;
+            }, "frame"_a);
 
-    py::class_<rs2::roi_sensor, rs2::sensor> roi_sensor(m, "roi_sensor"); // No docstring in C++
+    py::class_<rs2::roi_sensor, rs2::sensor, py_holder<rs2::roi_sensor>> roi_sensor(m, "roi_sensor"); // No docstring in C++
     roi_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
         .def("set_region_of_interest", &rs2::roi_sensor::set_region_of_interest, "roi"_a) // No docstring in C++
         .def("get_region_of_interest", &rs2::roi_sensor::get_region_of_interest); // No docstring in C++
 
-    py::class_<rs2::depth_sensor, rs2::sensor> depth_sensor(m, "depth_sensor"); // No docstring in C++
+    py::class_<rs2::depth_sensor, rs2::sensor, py_holder<rs2::depth_sensor>> depth_sensor(m, "depth_sensor"); // No docstring in C++
     depth_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
         .def("get_depth_scale", &rs2::depth_sensor::get_depth_scale,
             "Retrieves mapping between the units of the depth image and meters.");
 
-    py::class_<rs2::color_sensor, rs2::sensor> color_sensor(m, "color_sensor"); // No docstring in C++
+    py::class_<rs2::color_sensor, rs2::sensor, py_holder<rs2::color_sensor>> color_sensor(m, "color_sensor"); // No docstring in C++
     color_sensor.def(py::init<rs2::sensor>(), "sensor"_a);
 
-    py::class_<rs2::motion_sensor, rs2::sensor> motion_sensor(m, "motion_sensor"); // No docstring in C++
+    py::class_<rs2::motion_sensor, rs2::sensor, py_holder<rs2::motion_sensor>> motion_sensor(m, "motion_sensor"); // No docstring in C++
     motion_sensor.def(py::init<rs2::sensor>(), "sensor"_a);
 
-    py::class_<rs2::fisheye_sensor, rs2::sensor> fisheye_sensor(m, "fisheye_sensor"); // No docstring in C++
+    py::class_<rs2::fisheye_sensor, rs2::sensor, py_holder<rs2::fisheye_sensor>> fisheye_sensor(m, "fisheye_sensor"); // No docstring in C++
     fisheye_sensor.def(py::init<rs2::sensor>(), "sensor"_a);
 
-    py::class_<rs2::calibrated_sensor, rs2::sensor> cal_sensor( m, "calibrated_sensor" );
-    cal_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
-        .def("override_intrinsics",
-            &rs2::calibrated_sensor::override_intrinsics,
-            "intrinsics"_a,
-            py::call_guard< py::gil_scoped_release >())
-        .def("override_extrinsics",
-            &rs2::calibrated_sensor::override_extrinsics,
-            "extrinsics"_a,
-            py::call_guard< py::gil_scoped_release >())
-        .def("get_dsm_params",
-            &rs2::calibrated_sensor::get_dsm_params,
-            py::call_guard< py::gil_scoped_release >())
-        .def("override_dsm_params",
-            &rs2::calibrated_sensor::override_dsm_params,
-            "dsm_params"_a,
-            py::call_guard< py::gil_scoped_release >())
-        .def("reset_calibration",
-            &rs2::calibrated_sensor::reset_calibration,
-            py::call_guard< py::gil_scoped_release >());
-    
-    py::class_<rs2::max_usable_range_sensor, rs2::sensor> mur_sensor(m, "max_usable_range_sensor");
+    py::class_<rs2::safety_sensor, rs2::sensor, py_holder<rs2::safety_sensor>> safety_sensor(m, "safety_sensor"); // No docstring in C++
+    safety_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
+        .def("get_safety_preset", &rs2::safety_sensor::get_safety_preset, "get safety preset at index", "index"_a, py::call_guard<py::gil_scoped_release>())
+        .def("set_safety_preset", &rs2::safety_sensor::set_safety_preset, "set safety preset at index", "index"_a, "safety_preset"_a, py::call_guard<py::gil_scoped_release>())
+        .def("get_safety_interface_config", 
+            &rs2::safety_sensor::get_safety_interface_config,
+            "get safety interface config", "calib_location"_a = RS2_CALIB_LOCATION_RAM, py::call_guard<py::gil_scoped_release>())
+        .def("set_safety_interface_config", &rs2::safety_sensor::set_safety_interface_config,
+            "set safety interface config", "safety_interface_config"_a, py::call_guard<py::gil_scoped_release>())
+        .def("get_application_config", &rs2::safety_sensor::get_application_config, "get application config", py::call_guard<py::gil_scoped_release>())
+        .def("set_application_config", &rs2::safety_sensor::set_application_config, "set application config", "application_config_json_str"_a, py::call_guard<py::gil_scoped_release>());
+
+    py::class_<rs2::max_usable_range_sensor, rs2::sensor, py_holder<rs2::max_usable_range_sensor>> mur_sensor(m, "max_usable_range_sensor");
     mur_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
         .def("get_max_usable_depth_range",
             &rs2::max_usable_range_sensor::get_max_usable_depth_range,
             py::call_guard< py::gil_scoped_release >());
     
-    py::class_< rs2::debug_stream_sensor, rs2::sensor > ds_sensor( m, "debug_stream_sensor" );
+    py::class_< rs2::debug_stream_sensor, rs2::sensor, py_holder<rs2::debug_stream_sensor> > ds_sensor( m, "debug_stream_sensor" );
     ds_sensor.def( py::init< rs2::sensor >(), "sensor"_a )
         .def( "get_debug_stream_profiles",
                &rs2::debug_stream_sensor::get_debug_stream_profiles,
               py::call_guard< py::gil_scoped_release >() );
 
     // rs2::depth_stereo_sensor
-    py::class_<rs2::depth_stereo_sensor, rs2::depth_sensor> depth_stereo_sensor(m, "depth_stereo_sensor"); // No docstring in C++
+    py::class_<rs2::depth_stereo_sensor, rs2::depth_sensor, py_holder<rs2::depth_stereo_sensor>> depth_stereo_sensor(m, "depth_stereo_sensor"); // No docstring in C++
     depth_stereo_sensor.def(py::init<rs2::sensor>())
         .def("get_stereo_baseline", &rs2::depth_stereo_sensor::get_stereo_baseline, "Retrieve the stereoscopic baseline value from the sensor.");
 
-    py::class_<rs2::pose_sensor, rs2::sensor> pose_sensor(m, "pose_sensor"); // No docstring in C++
+    py::class_<rs2::pose_sensor, rs2::sensor, py_holder<rs2::pose_sensor>> pose_sensor(m, "pose_sensor"); // No docstring in C++
     pose_sensor.def(py::init<rs2::sensor>(), "sensor"_a)
         .def("import_localization_map", &rs2::pose_sensor::import_localization_map,
              "Load relocalization map onto device. Only one relocalization map can be imported at a time; "
@@ -189,7 +201,7 @@ void init_sensor(py::module &m) {
                 .def("__nonzero__", &rs2::pose_sensor::operator bool) // Called to implement truth value testing in Python 2
                 .def("__bool__", &rs2::pose_sensor::operator bool); // Called to implement truth value testing in Python 3
 
-    py::class_<rs2::wheel_odometer, rs2::sensor> wheel_odometer(m, "wheel_odometer"); // No docstring in C++
+    py::class_<rs2::wheel_odometer, rs2::sensor, py_holder<rs2::wheel_odometer>> wheel_odometer(m, "wheel_odometer"); // No docstring in C++
     wheel_odometer.def(py::init<rs2::sensor>(), "sensor"_a)
         .def("load_wheel_odometery_config", &rs2::wheel_odometer::load_wheel_odometery_config,
             "Load Wheel odometer settings from host to device.", "odometry_config_buf"_a)

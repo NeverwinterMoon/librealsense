@@ -1,5 +1,5 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2020 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2020 RealSense, Inc. All Rights Reserved.
 import time
 
 # Timer that counts forward in time (vs backwards in the 'timer' class)
@@ -18,7 +18,7 @@ class Stopwatch:
         else:
             self._start = time.perf_counter()
 
-    # Get elapsed since timer creation
+    # Get elapsed since timer creation, in seconds
     def get_elapsed(self):
         return time.perf_counter() - self._start
 

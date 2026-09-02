@@ -2,14 +2,14 @@
 
 ## Overview
 
-Hello RealSense example demonstrates the basics of connecting to a RealSense device and taking advantage of depth data by printing the distance to object in the center of camera feild of view.
+Hello RealSense example demonstrates the basics of connecting to a RealSense device and taking advantage of depth data by printing the distance to object in the center of camera field of view.
 
 ## Expected Output
-Assuming camera is connected you should see `"The camera is facing an object X meters away"` line being continously updated. X is the distance in meters to the object in the center of camera feild of view.
+Assuming camera is connected you should see `"The camera is facing an object X meters away"` line being continously updated. X is the distance in meters to the object in the center of camera field of view.
 
 ## Code Overview 
 
-First, we include the Intel® RealSense™ Cross-Platform API.  
+First, we include the RealSense™ Cross-Platform API.  
 All but advanced functionality is provided through a single header:
 ```cpp
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API

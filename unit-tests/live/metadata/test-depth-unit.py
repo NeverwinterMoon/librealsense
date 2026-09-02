@@ -1,9 +1,8 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
-#test:device L500*
 #test:device D400*
-#test:device SR300*
+#test:device D500* !D555
 
 import pyrealsense2 as rs
 from rspy import test
@@ -12,12 +11,12 @@ from rspy import test
 # get metadata depth units value and make sure it's non zero and equal to the depth sensor matching option value
 test.start("checking depth units on metadata")
 
-dev = test.find_first_device_or_exit()
+dev, ctx = test.find_first_device_or_exit()
 depth_sensor = dev.first_depth_sensor()
 
 try:
     cfg = pipeline = None
-    pipeline = rs.pipeline()
+    pipeline = rs.pipeline(ctx)
     cfg = rs.config()
     pipeline_profile = pipeline.start(cfg)
 

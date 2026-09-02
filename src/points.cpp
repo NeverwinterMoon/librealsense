@@ -1,7 +1,14 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2024 RealSense, Inc. All Rights Reserved.
+
 #include "points.h"
 #include "core/video.h"
+#include "core/video-frame.h"
+#include "core/frame-holder.h"
+#include "librealsense-exception.h"
+#include <rsutils/string/from.h>
+#include <fstream>
+#include <cmath>
 
 #define MIN_DISTANCE 1e-6
 
@@ -10,8 +17,7 @@ namespace librealsense {
 float3 * points::get_vertices()
 {
     get_frame_data();  // call GetData to ensure data is in main memory
-    auto xyz = (float3 *)data.data();
-    return xyz;
+    return (float3*)data.data();
 }
 
 std::tuple< uint8_t, uint8_t, uint8_t >
@@ -69,10 +75,10 @@ void points::export_to_ply( const std::string & fname, const frame_holder & text
             auto a = y * width + x, b = y * width + x + 1, c = ( y + 1 ) * width + x,
                  d = ( y + 1 ) * width + x + 1;
             if( vertices[a].z && vertices[b].z && vertices[c].z && vertices[d].z
-                && abs( vertices[a].z - vertices[b].z ) < threshold
-                && abs( vertices[a].z - vertices[c].z ) < threshold
-                && abs( vertices[b].z - vertices[d].z ) < threshold
-                && abs( vertices[c].z - vertices[d].z ) < threshold )
+                && std::abs( vertices[a].z - vertices[b].z ) < threshold
+                && std::abs( vertices[a].z - vertices[c].z ) < threshold
+                && std::abs( vertices[b].z - vertices[d].z ) < threshold
+                && std::abs( vertices[c].z - vertices[d].z ) < threshold )
             {
                 if( index2reducedIndex.count( a ) == 0 || index2reducedIndex.count( b ) == 0
                     || index2reducedIndex.count( c ) == 0 || index2reducedIndex.count( d ) == 0 )
@@ -151,4 +157,4 @@ float2 * points::get_texture_coordinates()
     return ijs;
 }
 
-}  // namespace librealsense
+} // namespace librealsense

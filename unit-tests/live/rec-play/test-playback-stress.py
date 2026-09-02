@@ -1,16 +1,20 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
-#test:timeout 1500
-#test:donotrun:!nightly
+# test:timeout 1500
+# Moving to weekly as this test is non live and use known records in a code that is seldom touched
+# test:donotrun:!weekly
 
 import pyrealsense2 as rs, os
 from rspy import log, test, repo
 from playback_helper import PlaybackStatusVerifier
+import time
 
-file_name = os.path.join( repo.build, 'unit-tests', 'recordings', 'all_combinations_depth_color.bag' )
-log.d( 'deadlock file:', file_name )
+# repo.build
+file_name = os.path.join(repo.build, 'unit-tests', 'recordings', 'all_combinations_depth_color.bag' )
+log.d( 'recorded file:', file_name )
 frames_in_bag_file = 64
+number_of_iterations = 250
 
 frames_count = 0
 
@@ -22,7 +26,7 @@ def frame_callback( f ):
 test.start( "Playback stress test" )
 
 log.d( "Playing back: " + file_name )
-for i in range(250):
+for i in range(number_of_iterations):
     try:
         log.d("Test - Starting iteration # " , i)
         ctx = rs.context()
@@ -38,10 +42,16 @@ for i in range(250):
         for sensor in sensors:
             sensor.start( frame_callback )
 
-        psv.wait_for_status( 5, rs.playback_status.playing )
-
         # We allow 10 seconds to each iteration to verify the playback_stopped event.
-        psv.wait_for_status( 10,  rs.playback_status.stopped )
+        timeout = 15
+        number_of_statuses = 2
+        psv.wait_for_status_changes(number_of_statuses,timeout);
+        
+        statuses = psv.get_statuses()
+        # we expect to get start and then stop
+        test.check_equal(number_of_statuses, len(statuses))
+        test.check_equal(statuses[0], rs.playback_status.playing)
+        test.check_equal(statuses[1], rs.playback_status.stopped)
 
         log.d("Stopping Sensors")
         for sensor in sensors:

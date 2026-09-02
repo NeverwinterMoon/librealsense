@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 #include <chrono>
@@ -8,10 +8,16 @@
 #include <vector>
 #include "../types.h"
 #include "extension.h"
-#include "streaming.h"
+#include "notification.h"
+#include "frame-holder.h"
+#include "stream-profile-interface.h"
+#include "notification.h"
+
 
 namespace librealsense
 {
+    class option;
+
     namespace device_serializer
     {
         struct sensor_identifier
@@ -329,6 +335,7 @@ namespace librealsense
             virtual void write_snapshot(uint32_t device_index, const nanoseconds& timestamp, rs2_extension type, const std::shared_ptr<extension_snapshot>& snapshot) = 0;
             virtual void write_snapshot(const sensor_identifier& sensor_id, const nanoseconds& timestamp, rs2_extension type, const std::shared_ptr<extension_snapshot>& snapshot) = 0;
             virtual void write_notification(const sensor_identifier& stream_id, const nanoseconds& timestamp, const notification& n) = 0;
+            virtual void write_extrinsics(const stream_identifier& stream_id, uint32_t reference_id, const rs2_extrinsics& ext) {}
             virtual const std::string& get_file_name() const = 0;
             virtual ~writer() = default;
         };

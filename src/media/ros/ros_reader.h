@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017-24 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -13,6 +13,14 @@
 namespace librealsense
 {
     using namespace device_serializer;
+
+    class context;
+    class frame_source;
+    class info_container;
+    class options_interface;
+    class options_container;
+    class processing_block_interface;
+    class recommended_proccesing_blocks_snapshot;
 
     class ros_reader: public device_serializer::reader
     {
@@ -47,9 +55,9 @@ namespace librealsense
         std::shared_ptr<serialized_frame> create_frame(const rosbag::MessageInstance& msg);
         static nanoseconds get_file_duration(const rosbag::Bag& file, uint32_t version);
         static void get_legacy_frame_metadata(const rosbag::Bag& bag,
-            const device_serializer::stream_identifier& stream_id,
-            const rosbag::MessageInstance &msg,
-            frame_additional_data& additional_data);
+                                              const device_serializer::stream_identifier& stream_id,
+                                              const rosbag::MessageInstance& msg,
+                                              frame_additional_data& additional_data);
 
         template <typename T>
         static bool safe_convert(const std::string& key, T& val)
@@ -67,10 +75,10 @@ namespace librealsense
         }
 
         static std::map<std::string, std::string> get_frame_metadata(const rosbag::Bag& bag,
-            const std::string& topic,
-            const device_serializer::stream_identifier& stream_id,
-            const rosbag::MessageInstance &msg,
-            frame_additional_data& additional_data);
+                                                                     const std::string& topic,
+                                                                     const device_serializer::stream_identifier& stream_id,
+                                                                     const rosbag::MessageInstance& msg,
+                                                                     frame_additional_data& additional_data);
         frame_holder create_image_from_message(const rosbag::MessageInstance &image_data) const;
         frame_holder create_motion_sample(const rosbag::MessageInstance &motion_data) const;
         static inline float3 to_float3(const geometry_msgs::Vector3& v);
@@ -81,16 +89,16 @@ namespace librealsense
         bool try_read_stream_extrinsic(const stream_identifier& stream_id, uint32_t& group_id, rs2_extrinsics& extrinsic) const;
         static void update_sensor_options(const rosbag::Bag& file, uint32_t sensor_index, const nanoseconds& time, uint32_t file_version, snapshot_collection& sensor_extensions, uint32_t version);
         void update_proccesing_blocks(const rosbag::Bag& file, uint32_t sensor_index, const nanoseconds& time, uint32_t file_version, snapshot_collection& sensor_extensions, uint32_t version, std::string pid, std::string sensor_name);
-        void update_l500_depth_sensor(const rosbag::Bag& file, uint32_t sensor_index, const nanoseconds& time, uint32_t file_version, snapshot_collection& sensor_extensions, uint32_t version, std::string pid, std::string sensor_name);
         void add_sensor_extension(snapshot_collection & sensor_extensions, std::string sensor_name);
        
-        bool is_depth_sensor(std::string sensor_name);
-        bool is_color_sensor(std::string sensor_name);
-        bool is_motion_module_sensor(std::string sensor_name);
-        bool is_fisheye_module_sensor(std::string sensor_name);
+        bool is_depth_sensor(const std::string& sensor_name);
+        bool is_stereo_depth_sensor( std::string sensor_name );
+        bool is_color_sensor(const std::string& sensor_name);
+        bool is_motion_module_sensor(const std::string& sensor_name);
+        bool is_fisheye_module_sensor(const std::string& sensor_name); 
+        bool is_safety_module_sensor(const std::string& sensor_name);
+        bool is_depth_mapping_sensor(const std::string& sensor_name);
         bool is_ds_PID(int pid);
-        bool is_sr300_PID(int pid);
-        bool is_l500_PID(int pid);
         std::shared_ptr<recommended_proccesing_blocks_snapshot> read_proccesing_blocks_for_version_under_4(std::string pid, std::string sensor_name, std::shared_ptr<options_interface> options);
         std::shared_ptr<recommended_proccesing_blocks_snapshot> read_proccesing_blocks(const rosbag::Bag& file, device_serializer::sensor_identifier sensor_id, const nanoseconds& timestamp,
             std::shared_ptr<options_interface> options, uint32_t file_version, std::string pid, std::string sensor_name);
@@ -101,8 +109,8 @@ namespace librealsense
         static std::shared_ptr<pose_stream_profile> create_pose_profile(uint32_t stream_index, uint32_t fps);
         static std::shared_ptr<motion_stream_profile> create_motion_stream(rs2_stream stream_type, uint32_t stream_index, uint32_t fps, rs2_format format, rs2_motion_device_intrinsic intrinsics);
         static std::shared_ptr<video_stream_profile> create_video_stream_profile(const platform::stream_profile& sp,
-            const sensor_msgs::CameraInfo& ci,
-            const stream_descriptor& sd);
+                                                                                 const sensor_msgs::CameraInfo& ci,
+                                                                                 const stream_descriptor& sd);
 
         stream_profiles read_legacy_stream_info(uint32_t sensor_index) const;
         stream_profiles read_stream_info(uint32_t device_index, uint32_t sensor_index) const;
@@ -111,25 +119,11 @@ namespace librealsense
         static std::pair<rs2_option, std::shared_ptr<librealsense::option>> create_property(const rosbag::MessageInstance& property_message_instance);
         /*Starting version 3*/
         static std::pair<rs2_option, std::shared_ptr<librealsense::option>> create_option(const rosbag::Bag& file, const rosbag::MessageInstance& value_message_instance);
-        static std::shared_ptr<librealsense::processing_block_interface> create_processing_block(const rosbag::MessageInstance& value_message_instance, bool& depth_to_disparity, std::shared_ptr<options_interface> options);
 
-        struct l500_data_per_resolution
-        {
-            float2 res_raw;
-            float2 zo_raw;
-            float2 res_world;
-            float2 zo_world;
-        };
-
-        struct l500_depth_data
-        {
-            float num_of_resolution;
-            l500_data_per_resolution data[MAX_NUM_OF_DEPTH_RESOLUTIONS];
-            float baseline;
-        };
-
-        l500_depth_data create_l500_intrinsic_depth(const rosbag::MessageInstance& value_message_instance);
-        ivcam2::intrinsic_depth ros_l500_depth_data_to_intrinsic_depth(ros_reader::l500_depth_data data);
+        std::shared_ptr< processing_block_interface >
+        create_processing_block( const rosbag::MessageInstance & value_message_instance,
+                                 bool & depth_to_disparity,
+                                 std::shared_ptr< options_interface > options );
 
         static notification create_notification(const rosbag::Bag& file, const rosbag::MessageInstance& message_instance);
         static std::shared_ptr<options_container> read_sensor_options(const rosbag::Bag& file, device_serializer::sensor_identifier sensor_id, const nanoseconds& timestamp, uint32_t file_version);
@@ -147,5 +141,6 @@ namespace librealsense
         std::shared_ptr<context>                m_context;
         uint32_t                                m_version;
         float                                   m_legacy_depth_units;
+        std::map< stream_identifier, std::pair< uint32_t, rs2_extrinsics > > m_extrinsics_map;
     };
 }

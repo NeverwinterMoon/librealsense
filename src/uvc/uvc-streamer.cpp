@@ -1,8 +1,7 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #include "uvc-streamer.h"
-#include "../backend.h"
 
 const int UVC_PAYLOAD_MAX_HEADER_LENGTH         = 1024;
 const int DEQUEUE_MILLISECONDS_TIMEOUT          = 50;
@@ -29,7 +28,7 @@ namespace librealsense
 
             _action_dispatcher.start();
 
-            _watchdog_timeout = (1000.0 / _context.profile.fps) * 10;
+            _watchdog_timeout = static_cast<int64_t>(((1000.0 / _context.profile.fps) * 10));
 
             init();
         }

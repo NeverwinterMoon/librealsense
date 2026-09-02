@@ -5,7 +5,7 @@ The attributes are recalculated and updated on per-frame basis.
 `librealsense2` supports querying a set predefined attributes as part of the frame data available to the end-user.
 In this explanatory we will overview
 - The Design and implementation of frame metadata in `librealsense2`
-- The Metadata support by Intel® RealSense™ devices
+- The Metadata support by RealSense™ devices
 
 
 ## Software Design and Implementation
@@ -87,13 +87,13 @@ GAIN_LEVEL|16
 AUTO_EXPOSURE|1  
 TIME_OF_ARRIVAL|1523871918775
 BACKEND_TIMESTAMP|1523871918741
-ACTUAL_FPS|30
+ACTUAL_FPS|30000
 
  - `rs-config-ui` includes a checkbox in the upper-right corner of  stream's canvas, clicking on which will bring up an overlay window with the metadata attributes available.  
 
 ​![Demo Presenting metadata attributes](./metadata/metadata-cpp-config-ui.png)
 
-# Metadata Support for Intel® RealSense™ devices
+# Metadata Support for RealSense™ devices
 In order for `librealsense2` to get access for device-generated attributes the following system preconditions shall be met:
 - OS shall support metadata provision - for Linux the specific kernel patches shall be applied.  
 - Device firmware shall declare and implement metadata attributes payload.

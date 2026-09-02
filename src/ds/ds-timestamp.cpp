@@ -1,8 +1,10 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
 #include "ds-private.h"
 #include "ds-timestamp.h"
+#include <src/frame.h>
+#include <src/core/time-service.h>
 
 #include <mutex>
 #include <chrono>
@@ -10,8 +12,9 @@
 #include <iterator>
 
 #include "device.h"
-#include "context.h"
 #include "image.h"
+#include "metadata.h"
+#include "d500/d585s-md.h"
 
 namespace librealsense
 {
@@ -58,7 +61,7 @@ namespace librealsense
         auto md = (librealsense::metadata_intel_basic*)(f->additional_data.metadata_blob.data());
         if(_has_metadata[pin_index] && md)
         {
-            return (double)(md->header.timestamp)*TIMESTAMP_USEC_TO_MSEC;
+            return (double)(md->header.timestamp)*MICROSEC_TO_MILLISEC;
         }
         else
         {
@@ -118,6 +121,108 @@ namespace librealsense
                                           _backup_timestamp_reader->get_frame_timestamp_domain(frame);
     }
 
+    ds_timestamp_reader_from_metadata_depth_mapping::ds_timestamp_reader_from_metadata_depth_mapping(std::unique_ptr<frame_timestamp_reader> backup_timestamp_reader)
+        : ds_timestamp_reader_from_metadata(std::move(backup_timestamp_reader)) {} 
+
+    rs2_time_t ds_timestamp_reader_from_metadata_depth_mapping::get_frame_timestamp(const std::shared_ptr<frame_interface>& frame)
+    {
+        std::lock_guard<std::recursive_mutex> lock(_mtx);
+
+        auto f = std::dynamic_pointer_cast<librealsense::frame>(frame);
+        if (!f)
+        {
+            LOG_ERROR("Frame is not valid. Failed to downcast to librealsense::frame.");
+            return 0;
+        }
+
+        _has_metadata[0] = has_metadata(frame);
+
+        auto md = (librealsense::md_occupancy*)(f->additional_data.metadata_blob.data() + platform::uvc_header_size);
+        if (_has_metadata[0] && md)
+        {
+            return (double)(md->frame_timestamp) * MICROSEC_TO_MILLISEC;
+        }
+        else
+        {
+            if (!one_time_note)
+            {
+                LOG_INFO("UVC metadata payloads not available. Please refer to the installation chapter for details.");
+                one_time_note = true;
+            }
+            return _backup_timestamp_reader->get_frame_timestamp(frame);
+        }
+    }
+    unsigned long long ds_timestamp_reader_from_metadata_depth_mapping::get_frame_counter(const std::shared_ptr<frame_interface>& frame) const
+    {
+        std::lock_guard<std::recursive_mutex> lock(_mtx);
+
+        auto f = std::dynamic_pointer_cast<librealsense::frame>(frame);
+        if (!f)
+        {
+            LOG_ERROR("Frame is not valid. Failed to downcast to librealsense::frame.");
+            return 0;
+        }
+
+        if (_has_metadata[0] && f->additional_data.metadata_size > platform::uvc_header_size)
+        {
+            auto md = (librealsense::md_occupancy*)(f->additional_data.metadata_blob.data() + platform::uvc_header_size);
+            return md->frame_counter;
+        }
+
+        return _backup_timestamp_reader->get_frame_counter(frame);
+    }
+
+    ds_timestamp_reader_from_metadata_safety::ds_timestamp_reader_from_metadata_safety(std::unique_ptr<frame_timestamp_reader> backup_timestamp_reader)
+        : ds_timestamp_reader_from_metadata(std::move(backup_timestamp_reader)) {}
+
+    rs2_time_t ds_timestamp_reader_from_metadata_safety::get_frame_timestamp(const std::shared_ptr<frame_interface>& frame)
+    {
+        std::lock_guard<std::recursive_mutex> lock(_mtx);
+
+        auto f = std::dynamic_pointer_cast<librealsense::frame>(frame);
+        if (!f)
+        {
+            LOG_ERROR("Frame is not valid. Failed to downcast to librealsense::frame.");
+            return 0;
+        }
+
+        _has_metadata[0] = has_metadata(frame);
+
+        auto md = (librealsense::md_safety_info*)(f->additional_data.metadata_blob.data() + platform::uvc_header_size);
+        if (_has_metadata[0] && md)
+        {
+            return (double)(md->frame_timestamp) * MICROSEC_TO_MILLISEC;
+        }
+        else
+        {
+            if (!one_time_note)
+            {
+                LOG_INFO("UVC metadata payloads not available. Please refer to the installation chapter for details.");
+                one_time_note = true;
+            }
+            return _backup_timestamp_reader->get_frame_timestamp(frame);
+        }
+    }
+    unsigned long long ds_timestamp_reader_from_metadata_safety::get_frame_counter(const std::shared_ptr<frame_interface>& frame) const
+    {
+        std::lock_guard<std::recursive_mutex> lock(_mtx);
+
+        auto f = std::dynamic_pointer_cast<librealsense::frame>(frame);
+        if (!f)
+        {
+            LOG_ERROR("Frame is not valid. Failed to downcast to librealsense::frame.");
+            return 0;
+        }
+
+        if (_has_metadata[0] && f->additional_data.metadata_size > platform::uvc_header_size)
+        {
+            auto md = (librealsense::md_safety_info*)(f->additional_data.metadata_blob.data() + platform::uvc_header_size);
+            return md->frame_counter;
+        }
+
+        return _backup_timestamp_reader->get_frame_counter(frame);
+    }
+
     ds_timestamp_reader_from_metadata_mipi::ds_timestamp_reader_from_metadata_mipi(std::unique_ptr<frame_timestamp_reader> backup_timestamp_reader)
     : ds_timestamp_reader_from_metadata(std::move(backup_timestamp_reader)) {}
 
@@ -141,7 +246,7 @@ namespace librealsense
         auto md = (librealsense::metadata_mipi_depth_raw*)(f->additional_data.metadata_blob.data());
         if(_has_metadata[pin_index] && md)
         {
-            return (double)(md->header.header.timestamp) * TIMESTAMP_USEC_TO_MSEC;
+            return (double)(md->header.header.timestamp) * MICROSEC_TO_MILLISEC;
         }
         else
         {
@@ -202,7 +307,7 @@ namespace librealsense
         auto md = (librealsense::metadata_mipi_rgb_raw*)(f->additional_data.metadata_blob.data());
         if(_has_metadata[pin_index] && md)
         {
-            return (double)(md->header.header.timestamp) * TIMESTAMP_USEC_TO_MSEC;
+            return (double)(md->header.header.timestamp) * MICROSEC_TO_MILLISEC;
         }
         else
         {
@@ -260,7 +365,7 @@ namespace librealsense
         auto md = (librealsense::metadata_hid_raw*)(f->additional_data.metadata_blob.data());
         if(md)
         {
-            return (double)(md->header.timestamp) * TIMESTAMP_USEC_TO_MSEC;
+            return (double)(md->header.timestamp) * MICROSEC_TO_MILLISEC;
         }
         else
         {
@@ -287,8 +392,8 @@ namespace librealsense
         _backup_timestamp_reader->reset();
     }
 
-    ds_timestamp_reader::ds_timestamp_reader(std::shared_ptr<platform::time_service> ts)
-        : counter(pins), _ts(ts)
+    ds_timestamp_reader::ds_timestamp_reader()
+        : counter(pins)
     {
         reset();
     }
@@ -304,8 +409,7 @@ namespace librealsense
 
     rs2_time_t ds_timestamp_reader::get_frame_timestamp(const std::shared_ptr<frame_interface>& frame)
     {
-        std::lock_guard<std::recursive_mutex> lock(_mtx);
-        return _ts->get_time();
+        return time_service::get_time();
     }
 
     unsigned long long ds_timestamp_reader::get_frame_counter(const std::shared_ptr<frame_interface>& frame) const
@@ -353,7 +457,7 @@ namespace librealsense
         // See d400_iio_hid_timestamp_reader description
         auto timestamp = *((uint32_t*)((const uint8_t*)f->get_frame_data() + timestamp_offset));
         // TODO - verify units with custom report
-        return static_cast<rs2_time_t>(timestamp) * TIMESTAMP_USEC_TO_MSEC;
+        return static_cast<rs2_time_t>(timestamp) * MICROSEC_TO_MILLISEC;
     }
 
     bool ds_custom_hid_timestamp_reader::has_metadata(const std::shared_ptr<frame_interface>& frame) const

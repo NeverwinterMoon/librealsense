@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -44,8 +44,17 @@ struct callback_invocation_holder
 
     ~callback_invocation_holder()
     {
-        if( invocation )
-            owner->deallocate( invocation );
+        if( invocation && owner )
+        {
+            try
+            {
+                owner->deallocate( invocation );
+            }
+            catch( const std::exception & e )
+            {
+                LOG_DEBUG( "Error while callback holder deallocation: " << e.what() );
+            }
+        }
     }
 
     callback_invocation_holder & operator=( callback_invocation_holder && other )

@@ -1,5 +1,5 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 /** \file rs_pipeline.h
 * \brief
@@ -40,6 +40,14 @@ extern "C" {
     * \param[out] error  if non-null, receives any error that occurs during this call, otherwise, errors are ignored
     */
     void rs2_pipeline_stop(rs2_pipeline* pipe, rs2_error ** error);
+
+    /**
+     * Set the device to be used in the pipline.
+     * The function is used to assign the device, useful when the user wish to set controls that cannot be set while streaming. 
+     * \param[in] pipe the pipeline.
+     * \param[in] device  the device to be used in the pipline.
+     */
+    void rs2_pipeline_set_device( rs2_pipeline * pipe, rs2_device * device, rs2_error ** error );
 
     /**
     * Wait until a new set of frames becomes available.

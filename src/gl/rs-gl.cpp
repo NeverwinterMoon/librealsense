@@ -1,9 +1,10 @@
 // License: Apache 2.0 See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #include "api.h"
 #include "synthetic-stream-gl.h"
 #include "yuy2rgb-gl.h"
+#include "m420-to-rgb-gl.h"
 #include "y4112rgb-gl.h"
 #include "align-gl.h"
 #include "pointcloud-gl.h"
@@ -81,6 +82,19 @@ rs2_processing_block* rs2_gl_create_yuy_decoder(int api_version, rs2_error** err
 }
 NOARGS_HANDLE_EXCEPTIONS_AND_RETURN(nullptr)
 
+rs2_processing_block* rs2_gl_create_m420_decoder(int api_version, rs2_error** error) BEGIN_API_CALL
+{
+    verify_version_compatibility(api_version);
+
+    auto block = std::make_shared<librealsense::gl::m420_to_rgb>();
+    auto backup = std::make_shared<librealsense::m420_converter>(RS2_FORMAT_RGB8);
+    auto dual = std::make_shared<librealsense::gl::dual_processing_block>();
+    dual->add(block);
+    dual->add(backup);
+    return new rs2_processing_block{ dual };
+}
+NOARGS_HANDLE_EXCEPTIONS_AND_RETURN(nullptr)
+
 rs2_processing_block* rs2_gl_create_y411_decoder(int api_version, rs2_error** error) BEGIN_API_CALL
 {
     verify_version_compatibility(api_version);
@@ -150,7 +164,7 @@ rs2_processing_block* rs2_gl_create_align(int api_version, rs2_stream to, rs2_er
 {
     verify_version_compatibility(api_version);
     auto block = std::make_shared<librealsense::gl::align_gl>(to);
-    auto backup = std::make_shared<librealsense::align>(to);
+    auto backup = align::create_align(to);
     auto dual = std::make_shared<librealsense::gl::dual_processing_block>();
     dual->add(block);
     dual->add(backup);

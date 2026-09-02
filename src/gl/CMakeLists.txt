@@ -1,7 +1,7 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2019-2024 RealSense, Inc. All Rights Reserved.
 
-cmake_minimum_required(VERSION 2.8.9...3.20.5)
+cmake_minimum_required(VERSION 3.10)
 
 project(realsense2-gl)
 
@@ -10,6 +10,8 @@ set(REALSENSE_GL_CPP
     synthetic-stream-gl.cpp
     yuy2rgb-gl.h
     yuy2rgb-gl.cpp
+    m420-to-rgb-gl.h
+    m420-to-rgb-gl.cpp
     y4112rgb-gl.h
     y4112rgb-gl.cpp
     pointcloud-gl.h
@@ -31,8 +33,6 @@ set(REALSENSE_GL_CPP
     colorizer-gl.cpp
     align-gl.h
     align-gl.cpp
-    ${LZ4_DIR}/lz4.h
-    ${LZ4_DIR}/lz4.c
 )
 
 set(REALSENSE_GL_PUBLIC_HEADERS
@@ -42,7 +42,8 @@ set(REALSENSE_GL_PUBLIC_HEADERS
 
 set(CMAKECONFIG_GL_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/${LRS_GL_TARGET}")
 
-include(${CMAKE_SOURCE_DIR}/CMake/opengl_config.cmake)
+set( DEPENDENCIES ${LRS_TARGET} )
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../CMake/opengl_config.cmake)
 
 if (${BUILD_SHARED_LIBS} AND ${BUILD_EASYLOGGINGPP})
     list(APPEND REALSENSE_GL_CPP ../../third-party/easyloggingpp/src/easylogging++.cc)
@@ -61,8 +62,6 @@ add_library(${LRS_GL_TARGET} ${REALSENSE_GL_CPP})
 if(BUILD_SHARED_LIBS)
     add_definitions(-DSHARED_LIBS)
 endif()
-
-include_directories(${LZ4_DIR})
 
 target_include_directories(${PROJECT_NAME}
     PRIVATE
@@ -91,6 +90,7 @@ configure_file(../../config/librealsense-gl.pc.in ../../config/realsense2-gl.pc 
 target_link_libraries( ${PROJECT_NAME}
     PRIVATE
         ${DEPENDENCIES}
+        rs_lz4
     )
 
 # CMake prior to 3.13 cannot install targets located in sub-directories.

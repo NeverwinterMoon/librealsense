@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #ifndef LIBREALSENSE_RS2_SENSOR_HPP
 #define LIBREALSENSE_RS2_SENSOR_HPP
@@ -8,6 +8,7 @@
 #include "rs_frame.hpp"
 #include "rs_processing.hpp"
 #include "rs_options.hpp"
+
 namespace rs2
 {
 
@@ -293,6 +294,41 @@ namespace rs2
             }
 
             return results;
+        }
+
+        std::vector<embedded_filter> query_embedded_filters() const
+        {
+            rs2_error* e = nullptr;
+            std::shared_ptr<rs2_embedded_filter_list> list(
+                rs2_query_embedded_filters(_sensor.get(), &e),
+                rs2_delete_embedded_filter_list);
+            error::handle(e);
+
+            auto size = rs2_get_embedded_filters_count(list.get(), &e);
+            error::handle(e);
+
+            std::vector<embedded_filter> results;
+            for (auto i = 0; i < size; i++)
+            {
+                std::shared_ptr<rs2_embedded_filter> ef(
+                    rs2_create_embedded_filter(list.get(), i, &e),
+                    rs2_delete_embedded_filter);
+                error::handle(e);
+
+                embedded_filter rs2_ef(ef);
+                results.push_back(rs2_ef);
+            }
+            return results;
+        }
+
+        template<class T>
+        T get_embedded_filter() const
+        {
+            for (auto&& ef : query_embedded_filters())
+            {
+                if (auto t = ef.as<T>()) return t;
+            }
+            throw rs2::error("Could not find requested embedded filter type!");
         }
 
         sensor& operator=(const std::shared_ptr<rs2_sensor> other)
@@ -663,68 +699,6 @@ namespace rs2
         explicit wheel_odometer(std::shared_ptr<rs2_sensor> dev) : wheel_odometer(sensor(dev)) {}
     };
 
-    class calibrated_sensor : public sensor
-    {
-    public:
-        calibrated_sensor( sensor s )
-            : sensor( s.get() )
-        {
-            rs2_error* e = nullptr;
-            if( rs2_is_sensor_extendable_to( _sensor.get(), RS2_EXTENSION_CALIBRATED_SENSOR, &e ) == 0 && !e )
-            {
-                _sensor.reset();
-            }
-            error::handle( e );
-        }
-
-        operator bool() const { return _sensor.get() != nullptr; }
-
-        /** Override the intrinsics at the sensor level, as DEPTH_TO_RGB calibration does */
-        void override_intrinsics( rs2_intrinsics const& intr )
-        {
-            rs2_error* e = nullptr;
-            rs2_override_intrinsics( _sensor.get(), &intr, &e );
-            error::handle( e );
-        }
-
-        /** Override the intrinsics at the sensor level, as DEPTH_TO_RGB calibration does */
-        void override_extrinsics( rs2_extrinsics const& extr )
-        {
-            rs2_error* e = nullptr;
-            rs2_override_extrinsics( _sensor.get(), &extr, &e );
-            error::handle( e );
-        }
-
-        /** Override the intrinsics at the sensor level, as DEPTH_TO_RGB calibration does */
-        rs2_dsm_params get_dsm_params() const
-        {
-            rs2_error* e = nullptr;
-            rs2_dsm_params params;
-            rs2_get_dsm_params( _sensor.get(), &params, &e );
-            error::handle( e );
-            return params;
-        }
-
-        /** Set the sensor DSM parameters
-         * This should ideally be done when the stream is NOT running. If it is, the
-         * parameters may not take effect immediately. */
-        void override_dsm_params( rs2_dsm_params const & params )
-        {
-            rs2_error* e = nullptr;
-            rs2_override_dsm_params( _sensor.get(), &params, &e );
-            error::handle( e );
-        }
-
-        /** Reset the sensor DSM calibration
-         */
-        void reset_calibration()
-        {
-            rs2_error* e = nullptr;
-            rs2_reset_sensor_calibration( _sensor.get(), &e );
-            error::handle( e );
-        }
-    };
-
     class max_usable_range_sensor : public sensor
     {
     public:
@@ -796,5 +770,22 @@ namespace rs2
             return results;
         }
     };
+
+    class depth_mapping_sensor : public sensor
+    {
+    public:
+        depth_mapping_sensor(sensor s)
+            : sensor(s.get())
+        {
+            rs2_error* e = nullptr;
+            if (rs2_is_sensor_extendable_to(_sensor.get(), RS2_EXTENSION_DEPTH_MAPPING_SENSOR, &e) == 0 && !e)
+            {
+                _sensor.reset();
+            }
+            error::handle(e);
+        }
+        operator bool() const { return _sensor.get() != nullptr; }
+    };
+
 }
 #endif // LIBREALSENSE_RS2_SENSOR_HPP

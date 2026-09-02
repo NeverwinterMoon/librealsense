@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2020 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2020 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
@@ -18,6 +18,7 @@
 #include <imgui.h>
 
 #include <rsutils/concurrency/concurrency.h>
+#include <rsutils/concurrency/shared-data-access.h>
 
 namespace rs2
 {
@@ -27,7 +28,7 @@ namespace rs2
     class stream_dashboard
     {
     public:
-        stream_dashboard(std::string name, int size) : q(size), name(name), t([this](){ thread_function(); }) {}
+        stream_dashboard(std::string name, int size) : q(size), name(name), shared_data(m), t([this](){ thread_function(); }) {}
         virtual ~stream_dashboard()
         {
             stop = true;
@@ -50,23 +51,11 @@ namespace rs2
     protected:
         virtual void process_frame(rs2::frame f) = 0;
 
-        void write_shared_data(std::function<void()> action)
-        {
-            std::lock_guard<std::mutex> lock(m);
-            action();
-        }
-
-        template<class T>
-        T read_shared_data(std::function<T()> action)
-        {
-            std::lock_guard<std::mutex> lock(m);
-            T res = action();
-            return res;
-        }
-
         void add_point(float x, float y) { xy.push_back(std::make_pair(x, y)); }
 
         void draw_dashboard(ux_window& win, rect& r);
+
+        rsutils::concurrency::shared_data_access shared_data;
 
     private:
         void thread_function()
@@ -137,6 +126,7 @@ namespace rs2
         void draw(ux_window& win, rect view_rect, std::vector<std::unique_ptr<device_model>> &  device_models);
 
         int get_output_height() const { return default_log_h; }
+        int get_dashboard_width() const { return default_dashboard_w; }
 
         void run_command(std::string command, std::vector<std::unique_ptr<device_model>> & device_models);
         bool user_defined_command(std::string command, std::vector<std::unique_ptr<device_model>> & device_models);
@@ -157,6 +147,8 @@ namespace rs2
 
         animated<int> default_log_h { 36 };
         bool is_output_open = true;
+        animated< int > default_dashboard_w { 0 };
+        bool is_dashboard_open = true;
 
         bool enable_firmware_logs = false;
 
@@ -177,6 +169,8 @@ namespace rs2
 
         animated<int> search_width { 0, std::chrono::milliseconds(400) };
         bool search_open = false;
+        bool set_number_open = false;
+        size_t max_notifications_kept = 1000;
 
         std::deque<std::string> autocomplete;
 

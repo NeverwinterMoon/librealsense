@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #ifndef LIBREALSENSE_RS2_EXPORT_HPP
 #define LIBREALSENSE_RS2_EXPORT_HPP
@@ -14,6 +14,8 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <array>
+
 namespace rs2
 {
     struct vec3d {
@@ -81,7 +83,7 @@ namespace rs2
             bool use_normals = get_option(OPTION_PLY_NORMALS) != 0;
             const auto verts = p.get_vertices();
             const auto texcoords = p.get_texture_coordinates();
-            const uint8_t* texture_data;
+            const uint8_t* texture_data = nullptr;
             if (use_texcoords) // texture might be on the gpu, get pointer to data before for-loop to avoid repeated access
                 texture_data = reinterpret_cast<const uint8_t*>(color.get_data());
             std::vector<rs2::vertex> new_verts;
@@ -242,14 +244,12 @@ namespace rs2
                     out << new_verts[i].x << " ";
                     out << new_verts[i].y << " ";
                     out << new_verts[i].z << " ";
-                    out << "\n";
 
                     if (mesh && use_normals)
                     {
                         out << normals[i].x << " ";
                         out << normals[i].y << " ";
                         out << normals[i].z << " ";
-                        out << "\n";
                     }
 
                     if (use_texcoords)
@@ -257,8 +257,9 @@ namespace rs2
                         out << unsigned(new_tex[i][0]) << " ";
                         out << unsigned(new_tex[i][1]) << " ";
                         out << unsigned(new_tex[i][2]) << " ";
-                        out << "\n";
                     }
+                    out << "\n";
+
                 }
                 if (mesh)
                 {

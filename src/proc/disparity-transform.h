@@ -1,12 +1,15 @@
 // Disparity transformation block is responsible to convert stereoscopic depth to disparity data
 // and vice versa
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
-#include "../include/librealsense2/hpp/rs_frame.hpp"
-#include "../include/librealsense2/hpp/rs_processing.hpp"
+#include <librealsense2/hpp/rs_frame.hpp>
+#include <librealsense2/hpp/rs_processing.hpp>
+#include <src/core/depth-frame.h>
+#include <src/core/sensor-interface.h>
+#include <src/depth-sensor.h>
 #include "synthetic-stream.h"
 
 namespace librealsense
@@ -30,7 +33,7 @@ namespace librealsense
             auto in = reinterpret_cast<const Tin*>(in_data);
             auto out = reinterpret_cast<Tout*>(out_data);
 
-            bool fp = (std::is_floating_point<Tin>::value);
+            const bool fp = (std::is_floating_point<Tin>::value);
             const float round = fp ? 0.5f : 0.f;
 
             float input{};

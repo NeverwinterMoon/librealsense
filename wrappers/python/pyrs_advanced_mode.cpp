@@ -1,5 +1,5 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 #include "pyrealsense2.h"
 #include <librealsense2/rs_advanced_mode.hpp>
@@ -256,7 +256,7 @@ void init_advanced_mode(py::module &m) {
 }
 
 void init_serializable_device(py::module& m) {
-    py::class_<rs2::serializable_device> serializable_device(m, "serializable_device");
+    py::class_<rs2::serializable_device, py_holder<rs2::serializable_device>> serializable_device(m, "serializable_device");
     serializable_device.def(py::init<rs2::device>(), "device"_a)
         .def("serialize_json", &rs2::serializable_device::serialize_json)
         .def("load_json", &rs2::serializable_device::load_json, "json_content"_a);

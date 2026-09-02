@@ -1,12 +1,12 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2020 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2020 RealSense, Inc. All Rights Reserved.
 
 #include <string>
 #include <vector>
 #include <sstream>
 #include "wrap.h"
 #include <rsutils/string/split.h>
-#include "../third-party/imgui/imgui.h"
+#include <third-party/imgui/imgui.h>
 
 namespace utilities {
 namespace imgui {

@@ -1,5 +1,5 @@
 #  Build RealSense SDK for Android OS
-This document describes how to build the Intel® RealSense™ SDK 2.0 including headless tools and examples for Android devices.
+This document describes how to build the RealSense SDK 2.0 including headless tools and examples for Android devices.
 
 > Read about Android support [here](../../doc/android.md).
 
@@ -11,7 +11,7 @@ If the build succeeded, the generated AAR will be located in `<librealsense_root
 
 ### Build With Android Studio
 1. Download and install [Android Studio IDE](https://developer.android.com/studio).
-2. Clone the latest [RealSense&trade; SDK 2.0](https://github.com/IntelRealSense/librealsense/releases) to your host machine.
+2. Clone the latest [RealSense&trade; SDK 2.0](https://github.com/realsenseai/librealsense/releases) to your host machine.
 3. Open Android Studio
 4. Open the Android project: Menu Bar-->File-->Open-->[path to build.gradle](./build.gradle)
 5. In the gradle tasks run :librealsense-->build-->assembleRelease:

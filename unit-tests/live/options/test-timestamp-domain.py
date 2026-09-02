@@ -1,7 +1,9 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2022 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2022 RealSense, Inc. All Rights Reserved.
 
-# test:device D400*
+# test:device each(D400*) !D401
+# test:device each(D500*) !D555
+# test:donotrun:!nightly
 
 import time
 import pyrealsense2 as rs
@@ -35,7 +37,7 @@ def set_and_verify_timestamp_domain(sensor, frame_queue, global_time_enabled: bo
     expected_ts_domain = rs.timestamp_domain.global_time if global_time_enabled else \
         rs.timestamp_domain.hardware_clock
 
-    test.check_equal(sensor.get_option(rs.option.global_time_enabled), global_time_enabled)
+    test.check_equal(bool(sensor.get_option(rs.option.global_time_enabled)), global_time_enabled)
 
     test.info(str(frame.get_profile().stream_type()) + " frame", frame)
     test.check_equal(frame.get_frame_timestamp_domain(), expected_ts_domain)
@@ -43,13 +45,13 @@ def set_and_verify_timestamp_domain(sensor, frame_queue, global_time_enabled: bo
 
 queue_capacity = 1
 
-device = test.find_first_device_or_exit()
+device, _ = test.find_first_device_or_exit()
 
 # Depth sensor test
 depth_frame_queue = rs.frame_queue(queue_capacity, keep_frames=False)
 
 depth_sensor = device.first_depth_sensor()
-depth_profile = next(p for p in depth_sensor.profiles if p.stream_type() == rs.stream.depth)
+depth_profile = next(p for p in depth_sensor.profiles if p.stream_type() == rs.stream.depth and p.is_default())
 depth_sensor.open(depth_profile)
 depth_sensor.start(depth_frame_queue)
 
@@ -66,22 +68,31 @@ test.finish()
 close_resources(depth_sensor)
 
 # Color sensor test
-color_frame_queue = rs.frame_queue(queue_capacity, keep_frames=False)
+product_name = device.get_info(rs.camera_info.name)
+color_sensor = None
+try:
+    color_sensor = device.first_color_sensor()
+except RuntimeError as rte:
+    if 'D421' not in product_name and 'D405' not in product_name: # Cameras with no color sensor may fail.
+        test.unexpected_exception()
 
-color_sensor = device.first_color_sensor()
-color_profile = next(p for p in color_sensor.profiles if p.stream_type() == rs.stream.color)
-color_sensor.open(color_profile)
-color_sensor.start(color_frame_queue)
+if color_sensor:      
+    color_frame_queue = rs.frame_queue(queue_capacity, keep_frames=False)
 
-# Test #3
-test.start('Check setting global time domain: color sensor - timestamp domain is OFF')
-set_and_verify_timestamp_domain(color_sensor, color_frame_queue, False)
-test.finish()
+    color_profile = next(p for p in color_sensor.profiles if p.stream_type() == rs.stream.color and p.is_default())
+    color_sensor.open(color_profile)
+    color_sensor.start(color_frame_queue)
 
-# Test #4
-test.start('Check setting global time domain: color sensor - timestamp domain is ON')
-set_and_verify_timestamp_domain(color_sensor, color_frame_queue, True)
-test.finish()
+    # Test #3
+    test.start('Check setting global time domain: color sensor - timestamp domain is OFF')
+    set_and_verify_timestamp_domain(color_sensor, color_frame_queue, False)
+    test.finish()
 
-close_resources(color_sensor)
+    # Test #4
+    test.start('Check setting global time domain: color sensor - timestamp domain is ON')
+    set_and_verify_timestamp_domain(color_sensor, color_frame_queue, True)
+    test.finish()
+
+    close_resources(color_sensor)
+
 test.print_results_and_exit()

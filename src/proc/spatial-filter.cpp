@@ -1,15 +1,16 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
-#include <librealsense2/hpp/rs_sensor.hpp>
-#include <librealsense2/hpp/rs_processing.hpp>
 #include "option.h"
 #include "environment.h"
-#include "context.h"
-#include "software-device.h"
+#include "software-sensor.h"
+#include <src/depth-sensor.h>
 #include "proc/synthetic-stream.h"
 #include "proc/hole-filling-filter.h"
 #include "proc/spatial-filter.h"
+
+#include <librealsense2/hpp/rs_sensor.hpp>
+#include <librealsense2/hpp/rs_processing.hpp>
 
 #include <rsutils/string/from.h>
 
@@ -118,7 +119,7 @@ namespace librealsense
         holes_filling_mode->set_description(sp_hf_16_pixel_radius, "16-pixel radius");
         holes_filling_mode->set_description(sp_hf_unlimited_radius, "Unlimited");
 
-        auto weak_holes_filling_mode = std::weak_ptr<ptr_option<uint8_t>>();
+        auto weak_holes_filling_mode = std::weak_ptr<ptr_option<uint8_t>>(holes_filling_mode);
         holes_filling_mode->on_set([this, weak_holes_filling_mode](float val)
         {
             auto strong_holes_filling_mode = weak_holes_filling_mode.lock();

@@ -7,11 +7,11 @@ We use OpenGL for cross-platform rendering and GLFW for window management.
 If you are using OpenCV, `imshow` is a good alternative. 
 
 ## Expected Output
-![expected output](https://raw.githubusercontent.com/wiki/IntelRealSense/librealsense/res/capture-expected.png)
+![expected output](https://raw.githubusercontent.com/wiki/realsenseai/librealsense/res/capture-expected.png)
 
 ## Code Overview 
 
-First, we include the Intel® RealSense™ Cross-Platform API.  
+First, we include the RealSense™ Cross-Platform API.  
 All but advanced functionality is provided through a single header:
 ```cpp
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API

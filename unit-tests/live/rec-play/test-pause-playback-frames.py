@@ -1,17 +1,20 @@
 # License: Apache 2.0. See LICENSE file in root directory.
-# Copyright(c) 2021 Intel Corporation. All Rights Reserved.
+# Copyright(c) 2021 RealSense, Inc. All Rights Reserved.
 
-#test:device L500*
-#test:device D400* !D457
+
+#test:device D400*
+#test:device D500*
+# Running weekly as this tests specific bug fix in a code that is seldom touched, no need to run for each push.
+# test:donotrun:!weekly
 
 # Objective:
 #
 # Verify that pause & resume did not mess up the recorded timestamps and the sleep time between each 2 frames is
 # reasonable. We had a BUG with calculating the sleep time between each 2 frames when the pause action occurred
 # before the recording base time was set (first frame arrival time), causing the recorded bag file "capture
-# time" to go up and down, and therefore huge sleep times. See [DSO-14342]
-# 
-# Here we test multiple flows on pause & resume actions and verify that the whole file will be be played until a
+# time" to go up and down, and therefore huge sleep times. See [RSDSO-14342]
+#
+# Here we test multiple flows on pause & resume actions and verify that the whole file will be played until a
 # stop event (EOF) within a reasonable time.
 
 import pyrealsense2 as rs, os, time, tempfile
@@ -22,7 +25,7 @@ from playback_helper import PlaybackStatusVerifier
 # (requires that no files are being held open inside this directory. Important to not keep any handle open to a file
 # in this directory, any handle as such must be set to None)
 temp_dir = tempfile.TemporaryDirectory( prefix='recordings_' )
-file_name = temp_dir.name + os.sep + 'rec.bag'
+file_name = temp_dir.name + os.sep + 'rec.db3'
 
 stop_detected = False
 STREAMING_DURATION = 3

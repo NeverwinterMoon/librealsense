@@ -1,5 +1,5 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2019 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2019 RealSense, Inc. All Rights Reserved.
 #ifdef __SSSE3__
 
 #include "sse-align.h"
@@ -14,7 +14,7 @@
 
 using namespace librealsense;
 
-template<int N> struct bytes { byte b[N]; };
+template<int N> struct bytes { uint8_t b[N]; };
 
 bool is_special_resolution(const rs2_intrinsics& depth, const rs2_intrinsics& to)
 {
@@ -52,7 +52,7 @@ inline void distorte_x_y<RS2_DISTORTION_MODIFIED_BROWN_CONRADY>(const __m128& x,
     auto d_x0 = _mm_add_ps(x_f0, _mm_add_ps(_mm_mul_ps(two, _mm_mul_ps(c[2], _mm_mul_ps(x_f0, y_f0))), r4_0));
 
     auto r5_0 = _mm_mul_ps(c[2], _mm_add_ps(r2_0, _mm_mul_ps(two, _mm_mul_ps(y_f0, y_f0))));
-    auto d_y0 = _mm_add_ps(y_f0, _mm_add_ps(_mm_mul_ps(two, _mm_mul_ps(c[3], _mm_mul_ps(x_f0, y_f0))), r4_0));
+    auto d_y0 = _mm_add_ps(y_f0, _mm_add_ps(_mm_mul_ps(two, _mm_mul_ps(c[3], _mm_mul_ps(x_f0, y_f0))), r5_0));
 
     *distorted_x = d_x0;
     *distorted_y = d_y0;
@@ -64,7 +64,7 @@ inline void get_texture_map_sse(const uint16_t * depth,
     float depth_scale,
     const unsigned int size,
     const float * pre_compute_x, const float * pre_compute_y,
-    byte * pixels_ptr_int,
+    uint8_t * pixels_ptr_int,
     const rs2_intrinsics& to,
     const rs2_extrinsics& from_to_other)
 {
@@ -167,8 +167,8 @@ inline void get_texture_map_sse(const uint16_t * depth,
         auto res1_0 = _mm_shuffle_ps(uuvv1_0, uuvv1_0, _MM_SHUFFLE(3, 1, 2, 0));
         auto res2_0 = _mm_shuffle_ps(uuvv2_0, uuvv2_0, _MM_SHUFFLE(3, 1, 2, 0));
 
-        auto res1_int0 = _mm_cvtps_epi32(res1_0);
-        auto res2_int0 = _mm_cvtps_epi32(res2_0);
+        auto res1_int0 = _mm_cvttps_epi32(res1_0);
+        auto res2_int0 = _mm_cvttps_epi32(res2_0);
 
         _mm_stream_si128(&res[0], res1_int0);
         _mm_stream_si128(&res[1], res2_int0);
@@ -184,8 +184,8 @@ inline void get_texture_map_sse(const uint16_t * depth,
         auto res1 = _mm_shuffle_ps(uuvv1_1, uuvv1_1, _MM_SHUFFLE(3, 1, 2, 0));
         auto res2 = _mm_shuffle_ps(uuvv2_1, uuvv2_1, _MM_SHUFFLE(3, 1, 2, 0));
 
-        auto res1_int1 = _mm_cvtps_epi32(res1);
-        auto res2_int1 = _mm_cvtps_epi32(res2);
+        auto res1_int1 = _mm_cvttps_epi32(res1);
+        auto res2_int1 = _mm_cvttps_epi32(res2);
 
         _mm_stream_si128(&res[0], res1_int1);
         _mm_stream_si128(&res[1], res2_int1);
@@ -281,7 +281,7 @@ inline void image_transform::move_depth_to_other(const uint16_t* z_pixels, uint1
     }
 }
 
-void image_transform::align_other_to_depth(const uint16_t* z_pixels, const byte* source, byte* dest, int bpp, const rs2_intrinsics& to,
+void image_transform::align_other_to_depth(const uint16_t* z_pixels, const uint8_t * source, uint8_t * dest, int bpp, const rs2_intrinsics& to,
     const rs2_extrinsics& from_to_other)
 {
     switch (to.model)
@@ -302,7 +302,7 @@ inline void image_transform::align_depth_to_other_sse(const uint16_t * z_pixels,
     const rs2_extrinsics& from_to_other)
 {
     get_texture_map_sse<dist>(z_pixels, _depth_scale, _depth.height*_depth.width, _pre_compute_map_x_top_left.data(),
-        _pre_compute_map_y_top_left.data(), (byte*)_pixel_top_left_int.data(), to, from_to_other);
+        _pre_compute_map_y_top_left.data(), (uint8_t *)_pixel_top_left_int.data(), to, from_to_other);
 
     float fov[2];
     rs2_fov(&depth, fov);
@@ -314,7 +314,7 @@ inline void image_transform::align_depth_to_other_sse(const uint16_t * z_pixels,
     if (pixels_per_angle_depth.x < pixels_per_angle_target.x || pixels_per_angle_depth.y < pixels_per_angle_target.y || is_special_resolution(depth, to))
     {
         get_texture_map_sse<dist>(z_pixels, _depth_scale, _depth.height*_depth.width, _pre_compute_map_x_bottom_right.data(),
-            _pre_compute_map_y_bottom_right.data(), (byte*)_pixel_bottom_right_int.data(), to, from_to_other);
+            _pre_compute_map_y_bottom_right.data(), (uint8_t *)_pixel_bottom_right_int.data(), to, from_to_other);
 
         move_depth_to_other(z_pixels, dest, to, _pixel_top_left_int, _pixel_bottom_right_int);
     }
@@ -326,17 +326,17 @@ inline void image_transform::align_depth_to_other_sse(const uint16_t * z_pixels,
 }
 
 template<rs2_distortion dist>
-inline void image_transform::align_other_to_depth_sse(const uint16_t * z_pixels, const byte * source, byte * dest, int bpp, const rs2_intrinsics& to,
+inline void image_transform::align_other_to_depth_sse(const uint16_t * z_pixels, const uint8_t * source, uint8_t * dest, int bpp, const rs2_intrinsics& to,
     const rs2_extrinsics& from_to_other)
 {
     get_texture_map_sse<dist>(z_pixels, _depth_scale, _depth.height*_depth.width, _pre_compute_map_x_top_left.data(),
-        _pre_compute_map_y_top_left.data(), (byte*)_pixel_top_left_int.data(), to, from_to_other);
+        _pre_compute_map_y_top_left.data(), (uint8_t *)_pixel_top_left_int.data(), to, from_to_other);
 
     std::vector<int2>& bottom_right = _pixel_top_left_int;
     if (to.height < _depth.height && to.width < _depth.width)
     {
         get_texture_map_sse<dist>(z_pixels, _depth_scale, _depth.height*_depth.width, _pre_compute_map_x_bottom_right.data(),
-            _pre_compute_map_y_bottom_right.data(), (byte*)_pixel_bottom_right_int.data(), to, from_to_other);
+            _pre_compute_map_y_bottom_right.data(), (uint8_t *)_pixel_bottom_right_int.data(), to, from_to_other);
 
         bottom_right = _pixel_bottom_right_int;
     }
@@ -403,7 +403,7 @@ void align_sse::reset_cache(rs2_stream from, rs2_stream to)
 
 void align_sse::align_z_to_other(rs2::video_frame& aligned, const rs2::video_frame& depth, const rs2::video_stream_profile& other_profile, float z_scale)
 {
-    byte* aligned_data = reinterpret_cast<byte*>(const_cast<void*>(aligned.get_data()));
+    uint8_t * aligned_data = reinterpret_cast<uint8_t *>(const_cast<void*>(aligned.get_data()));
     auto aligned_profile = aligned.get_profile().as<rs2::video_stream_profile>();
     memset(aligned_data, 0, aligned_profile.height() * aligned_profile.width() * aligned.get_bytes_per_pixel());
 
@@ -425,7 +425,7 @@ void align_sse::align_z_to_other(rs2::video_frame& aligned, const rs2::video_fra
 
 void align_sse::align_other_to_z(rs2::video_frame& aligned, const rs2::video_frame& depth, const rs2::video_frame& other, float z_scale)
 {
-    byte* aligned_data = reinterpret_cast<byte*>(const_cast<void*>(aligned.get_data()));
+    uint8_t * aligned_data = reinterpret_cast<uint8_t *>(const_cast<void*>(aligned.get_data()));
     auto aligned_profile = aligned.get_profile().as<rs2::video_stream_profile>();
     memset(aligned_data, 0, aligned_profile.height() * aligned_profile.width() * aligned.get_bytes_per_pixel());
 
@@ -437,7 +437,7 @@ void align_sse::align_other_to_z(rs2::video_frame& aligned, const rs2::video_fra
     auto z_to_other = depth_profile.get_extrinsics_to(other_profile);
 
     auto z_pixels = reinterpret_cast<const uint16_t*>(depth.get_data());
-    auto other_pixels = reinterpret_cast<const byte*>(other.get_data());
+    auto other_pixels = reinterpret_cast<const uint8_t *>(other.get_data());
 
     if (_stream_transform == nullptr)
     {

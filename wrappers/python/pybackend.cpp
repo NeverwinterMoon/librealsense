@@ -1,5 +1,5 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 #include <pybind11/pybind11.h>
 
@@ -14,9 +14,12 @@ Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
 // makes std::function conversions work
 #include <pybind11/functional.h>
 
-#include "core/options.h"   // Workaround for the missing DLL_EXPORT template
+#include <librealsense2/h/rs_option.h>
 #include "core/info.h"   // Workaround for the missing DLL_EXPORT template
 #include "../src/backend.h"
+#include <src/core/time-service.h>
+#include <src/platform/command-transfer.h>
+#include <src/platform/hid-device.h>
 #include "pybackend_extras.h"
 #include "../../third-party/stb_image_write.h"
 
@@ -31,6 +34,12 @@ using namespace pybind11::literals;
 
 using namespace librealsense;
 using namespace pybackend2;
+
+namespace librealsense {
+namespace platform {
+std::shared_ptr< backend > create_backend();
+}  // namespace platform
+}  // namespace librealsense
 
 
 // Prevents expensive copies of pixel buffers into python
@@ -58,10 +67,7 @@ PYBIND11_MODULE(NAME, m) {
                  .def_readwrite("def", &platform::control_range::def)
                  .def_readwrite("step", &platform::control_range::step);
 
-    py::class_<platform::time_service> time_service(m, "time_service");
-    time_service.def("get_time", &platform::time_service::get_time);
-
-    py::class_<platform::os_time_service, platform::time_service> os_time_service(m, "os_time_service");
+    m.def("get_time", &librealsense::time_service::get_time);
 
 #define BIND_RAW_RO_ARRAY(class, name, type, size) #name, [](const class &c) -> const std::array<type, size>& { return reinterpret_cast<const std::array<type, size>&>(c.name); }
 #define BIND_RAW_RW_ARRAY(class, name, type, size) BIND_RAW_RO_ARRAY(class, name, type, size), [](class &c, const std::array<type, size> &arr) { for (int i=0; i<size; ++i) c.name[i] = arr[i]; }
@@ -96,7 +102,7 @@ PYBIND11_MODULE(NAME, m) {
                   .def_readwrite("id", &platform::extension_unit::id);
 
     py::class_<platform::command_transfer, std::shared_ptr<platform::command_transfer>> command_transfer(m, "command_transfer");
-    command_transfer.def("send_receive", &platform::command_transfer::send_receive, "data"_a, "timeout_ms"_a=5000, "require_response"_a=true);
+    command_transfer.def("send_receive", &platform::command_transfer::send_receive, "data"_a, "size"_a, "timeout_ms"_a=5000, "require_response"_a=true);
 
     py::enum_<rs2_option> option(m, "option");
     option.value("backlight_compensation", RS2_OPTION_BACKLIGHT_COMPENSATION)
@@ -170,7 +176,7 @@ PYBIND11_MODULE(NAME, m) {
         .value("activate_pixel_invalidation", RS2_OPTION_INVALIDATION_BYPASS)
         .value("ambient_light_environment_level", RS2_OPTION_AMBIENT_LIGHT)
         .value("digital_gain", RS2_OPTION_DIGITAL_GAIN)
-        .value("sensor_resolution_mode", RS2_OPTION_SENSOR_MODE)
+        .value("sensor_resolution_mode", RS2_OPTION_SENSOR_MODE)  // Deprecated
         .value("emitter_always_on", RS2_OPTION_EMITTER_ALWAYS_ON)
         .value("thermal_compensation", RS2_OPTION_THERMAL_COMPENSATION)
         .value("host_performance", RS2_OPTION_HOST_PERFORMANCE)
@@ -193,6 +199,9 @@ PYBIND11_MODULE(NAME, m) {
         .value("gain_limit_toggle", RS2_OPTION_AUTO_GAIN_LIMIT_TOGGLE)
         .value("emitter_frequency", RS2_OPTION_EMITTER_FREQUENCY)
         .value("depth_auto_exposure_mode", RS2_OPTION_DEPTH_AUTO_EXPOSURE_MODE)
+        .value("safety_preset_active_index", RS2_OPTION_SAFETY_PRESET_ACTIVE_INDEX)
+        .value("safety_mode", RS2_OPTION_SAFETY_MODE)
+        .value("rgb_tnr_enabled", RS2_OPTION_RGB_TNR_ENABLED)
         .value("count", RS2_OPTION_COUNT);
 
     py::enum_<platform::power_state> power_state(m, "power_state");
@@ -262,11 +271,6 @@ PYBIND11_MODULE(NAME, m) {
     hid_sensor_input.def_readwrite("index", &platform::hid_sensor_input::index)
                     .def_readwrite("name", &platform::hid_sensor_input::name);
 
-    py::class_<platform::callback_data> callback_data(m, "callback_data");
-    callback_data.def_readwrite("sensor", &platform::callback_data::sensor)
-                 .def_readwrite("sensor_input", &platform::callback_data::sensor_input)
-                 .def_readwrite("value", &platform::callback_data::value);
-
     py::class_<platform::sensor_data> sensor_data(m, "sensor_data");
     sensor_data.def_readwrite("sensor", &platform::sensor_data::sensor)
                .def_readwrite("fo", &platform::sensor_data::fo);
@@ -288,11 +292,8 @@ PYBIND11_MODULE(NAME, m) {
 
     py::class_<platform::hid_sensor_data> hid_sensor_data(m, "hid_sensor_data");
     hid_sensor_data.def_readwrite("x", &platform::hid_sensor_data::x)
-                   .def_property(BIND_RAW_RW_ARRAY(platform::hid_sensor_data, reserved1, char, 2))
                    .def_readwrite("y", &platform::hid_sensor_data::y)
-                   .def_property(BIND_RAW_RW_ARRAY(platform::hid_sensor_data, reserved2, char, 2))
                    .def_readwrite("z", &platform::hid_sensor_data::z)
-                   .def_property(BIND_RAW_RW_ARRAY(platform::hid_sensor_data, reserved3, char, 2))
                    .def_readwrite("ts_low", &platform::hid_sensor_data::ts_low)
                    .def_readwrite("ts_high", &platform::hid_sensor_data::ts_high);
 
@@ -390,8 +391,7 @@ PYBIND11_MODULE(NAME, m) {
         .def("create_usb_device", &platform::backend::create_usb_device, "info"_a)
         .def("query_usb_devices", &platform::backend::query_usb_devices)
         .def("create_hid_device", &platform::backend::create_hid_device, "info"_a)
-        .def("query_hid_devices", &platform::backend::query_hid_devices)
-        .def("create_time_service", &platform::backend::create_time_service);
+        .def("query_hid_devices", &platform::backend::query_hid_devices);
 
     py::class_<platform::multi_pins_uvc_device, std::shared_ptr<platform::multi_pins_uvc_device>, platform::uvc_device> multi_pins_uvc_device(m, "multi_pins_uvc_device");
     multi_pins_uvc_device.def(py::init<std::vector<std::shared_ptr<platform::uvc_device>>&>())
@@ -474,7 +474,6 @@ PYBIND11_MODULE(NAME, m) {
 }
 
 // Workaroud for failure to export template <typename T> class recordable
-void librealsense::option::create_snapshot(std::shared_ptr<option>& snapshot) const {}
 void librealsense::info_container::create_snapshot(std::shared_ptr<librealsense::info_interface> &) const {}
 void librealsense::info_container::register_info(rs2_camera_info info, const std::string& val){}
 void librealsense::info_container::update_info(rs2_camera_info info, const std::string& val) {}
@@ -482,4 +481,3 @@ void librealsense::info_container::enable_recording(std::function<void(const inf
 void librealsense::info_container::update(std::shared_ptr<extension_snapshot> ext){}
 bool librealsense::info_container::supports_info(rs2_camera_info info) const { return false; }
 const std::string& librealsense::info_container::get_info(enum rs2_camera_info) const { static std::string s = ""; return s; }
-std::vector<rs2_option> librealsense::options_container::get_supported_options(void)const { return{}; }

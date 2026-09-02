@@ -1,8 +1,8 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #pragma once
-#include "../../include/librealsense2/h/rs_types.h"
+#include <librealsense2/h/rs_types.h>
 #include <memory>
 #include <functional>
 

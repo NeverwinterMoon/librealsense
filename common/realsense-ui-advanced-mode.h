@@ -1,12 +1,13 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2017 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2017 RealSense, Inc. All Rights Reserved.
 
 #pragma once
 
 #include <librealsense2/rs_advanced_mode.hpp>
-#include <types.h>
 #include <type_traits>
 #include <rsutils/string/string-utilities.h>
+#include <realsense_imgui.h>
+#include "textual-icons.h"
 
 #define TEXT_BUFF_SIZE 1024
 
@@ -20,7 +21,8 @@ bool* draw_edit_button(const char* id, T val, std::string*& val_str)
     ImGui::SetCursorPosX(268);
     if (!edit_mode[id])
     {
-        std::string edit_id = rsutils::string::from() << u8"\uf044##" << id;
+        std::string edit_id = rsutils::string::from() 
+            << rs2::textual_icons::edit << "##" << id;
         ImGui::PushStyleColor(ImGuiCol_Text,  { 0.8f, 0.8f, 0.8f, 1.f });
         ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, { 0.8f, 0.8f, 0.8f, 1.f } );
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 1.f,1.f,1.f,0.f });
@@ -32,13 +34,14 @@ bool* draw_edit_button(const char* id, T val, std::string*& val_str)
         }
         if (ImGui::IsItemHovered())
         {
-            ImGui::SetTooltip("Enter text-edit mode");
+            RsImGui::CustomTooltip("Enter text-edit mode");
         }
         ImGui::PopStyleColor(4);
     }
     else
     {
-        std::string edit_id = rsutils::string::from() << u8"\uf044##" << id;
+        std::string edit_id = rsutils::string::from()   
+            << rs2::textual_icons::edit << "##" << id;
         ImGui::PushStyleColor(ImGuiCol_Text,  { 0.8f, 0.8f, 1.f, 1.f });
         ImGui::PushStyleColor(ImGuiCol_TextSelectedBg,  { 0.8f, 0.8f, 1.f, 1.f });
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, { 1.f,1.f,1.f,0.f });
@@ -49,7 +52,7 @@ bool* draw_edit_button(const char* id, T val, std::string*& val_str)
         }
         if (ImGui::IsItemHovered())
         {
-            ImGui::SetTooltip("Exit text-edit mode");
+            RsImGui::CustomTooltip("Exit text-edit mode");
         }
         ImGui::PopStyleColor(4);
     }
@@ -75,7 +78,7 @@ inline void slider_int(std::string& error_message, const char* id, T* val, S T::
     {
         char buff[TEXT_BUFF_SIZE];
         memset(buff, 0, TEXT_BUFF_SIZE);
-        strcpy(buff, val_ptr->c_str());
+        strncpy(buff, val_ptr->c_str(), TEXT_BUFF_SIZE - 1);
         if (ImGui::InputText(slider_id.c_str(), buff, TEXT_BUFF_SIZE,
             ImGuiInputTextFlags_EnterReturnsTrue))
         {
@@ -140,14 +143,14 @@ inline void slider_float(std::string& error_message, const char* id, T* val, S T
     {
         char buff[TEXT_BUFF_SIZE];
         memset(buff, 0, TEXT_BUFF_SIZE);
-        strcpy(buff, val_ptr->c_str());
+        strncpy(buff, val_ptr->c_str(), TEXT_BUFF_SIZE - 1);
         if (ImGui::InputText(slider_id.c_str(), buff, TEXT_BUFF_SIZE,
             ImGuiInputTextFlags_EnterReturnsTrue))
         {
-            int new_value = 0;
-            if (!rsutils::string::string_to_value<int>(buff, new_value))
+            float new_value = 0;
+            if (!rsutils::string::string_to_value<float>(buff, new_value))
             {
-                error_message = "Invalid integer input!";
+                error_message = "Invalid numeric input!";
             }
             else
             {
@@ -203,7 +206,7 @@ struct advanced_mode_control
 };
 
 inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced, 
-    advanced_mode_control& amc, bool& get_curr_advanced_controls, bool& was_set, std::string& error_message)
+    advanced_mode_control& amc, bool& get_curr_advanced_controls, bool& was_set, std::string& error_message, bool d457_device=false)
 {
     if (get_curr_advanced_controls)
     {
@@ -233,7 +236,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Depth Control"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -258,6 +261,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.depth_controls.vals[0] = advanced.get_depth_control( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -269,7 +273,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Rsm"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -288,6 +292,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.rsm.vals[0] = advanced.get_rsm( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -300,7 +305,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Rau Support Vector Control"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -323,6 +328,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.rsvc.vals[0] = advanced.get_rau_support_vector_control( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -334,7 +340,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Color Control"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -354,6 +360,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.color_control.vals[0] = advanced.get_color_control( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -365,7 +372,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Rau Color Thresholds Control"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -383,6 +390,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.rctc.vals[0] = advanced.get_rau_thresholds_control( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -394,7 +402,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("SLO Color Thresholds Control"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -412,6 +420,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.sctc.vals[0] = advanced.get_slo_color_thresholds_control( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -423,7 +432,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("SLO Penalty Control"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -444,6 +453,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.spc.vals[0] = advanced.get_slo_penalty_control( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -455,7 +465,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("HDAD"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -475,6 +485,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.hdad.vals[0] = advanced.get_hdad();
                 ImGui::TreePop();
                 throw;
             }
@@ -486,7 +497,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Color Correction"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -513,6 +524,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.cc.vals[0] = advanced.get_color_correction( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -524,7 +536,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Depth Table"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -544,6 +556,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.depth_table.vals[0] = advanced.get_depth_table( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -553,9 +566,10 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
         ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode("AE Control"))
+    //AE setpoint is blocked in D457 
+    if (!d457_device && ImGui::TreeNode("AE Control"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -571,6 +585,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.ae.vals[0] = advanced.get_ae_control();
                 ImGui::TreePop();
                 throw;
             }
@@ -582,7 +597,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Census Enable Reg"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -599,6 +614,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.census.vals[0] = advanced.get_census( 0 );
                 ImGui::TreePop();
                 throw;
             }
@@ -610,7 +626,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
 
     if (ImGui::TreeNode("Disparity Modulation"))
     {
-        ImGui::PushItemWidth(-1);
+        ImGui::PushItemWidth(ImGui::CalcItemWidth());
 
         auto to_set = false;
 
@@ -626,6 +642,7 @@ inline void draw_advanced_mode_controls(rs400::advanced_mode& advanced,
             }
             catch (...)
             {
+                amc.amp_factor.vals[0] = advanced.get_amp_factor( 0 );
                 ImGui::TreePop();
                 throw;
             }

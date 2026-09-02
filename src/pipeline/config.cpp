@@ -1,8 +1,13 @@
 // License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2015 Intel Corporation. All Rights Reserved.
+// Copyright(c) 2015 RealSense, Inc. All Rights Reserved.
 
 #include "config.h"
 #include "pipeline.h"
+#include "platform/platform-device-info.h"
+#include "media/playback/playback-device-info.h"
+#include "context.h"
+#include <rsutils/string/from.h>
+
 
 namespace librealsense
 {
@@ -185,8 +190,11 @@ namespace librealsense
             std::lock_guard<std::mutex> lock(_mtx);
             _resolved_profile.reset();
 
+            std::shared_ptr< librealsense::device_interface > requested_device = pipe->get_device();
+            if(! requested_device )
+                requested_device = resolve_device_requests( pipe, timeout );
+
             //Resolve the the device that was specified by the user, this call will wait in case the device is not availabe.
-            auto requested_device = resolve_device_requests(pipe, timeout);
             if (requested_device != nullptr)
             {
                 _resolved_profile = resolve(requested_device);
@@ -246,17 +254,14 @@ namespace librealsense
             //Check if the file is already loaded to context, and if so return that device
             for (auto&& d : ctx->query_devices(RS2_PRODUCT_LINE_ANY))
             {
-                auto playback_devs = d->get_device_data().playback_devices;
-                for (auto&& p : playback_devs)
-                {
-                    if (p.file_path == file)
-                    {
-                        return d->create_device();
-                    }
-                }
+                auto pdev = std::dynamic_pointer_cast< playback_device_info >( d );
+                if( pdev && pdev->get_filename() == file )
+                    return pdev->create_device();
             }
 
-            return ctx->add_device(file)->create_device();
+            auto dev_info = std::make_shared< playback_device_info >( ctx, file );
+            ctx->add_device( dev_info );
+            return dev_info->create_device();
         }
 
         std::shared_ptr<device_interface> config::resolve_device_requests(std::shared_ptr<pipeline> pipe, const std::chrono::milliseconds& timeout)

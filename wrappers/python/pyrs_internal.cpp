@@ -1,5 +1,5 @@
 /* License: Apache 2.0. See LICENSE file in root directory.
-Copyright(c) 2017 Intel Corporation. All Rights Reserved. */
+Copyright(c) 2017 RealSense, Inc. All Rights Reserved. */
 
 #include "pyrealsense2.h"
 #include <librealsense2/hpp/rs_internal.hpp>
@@ -42,13 +42,7 @@ void init_internal(py::module &m) {
     py::class_< rs2_software_video_frame >( m,
                                             "software_video_frame",
                                             "All the parameters required to define a video frame" )
-        .def( py::init( []() {
-            rs2_software_video_frame f;
-            f.deleter = nullptr;
-            f.pixels = nullptr;
-            f.profile = nullptr;
-            return f;
-        } ) )  // guarantee deleter is set to nullptr
+        .def( py::init( []() { return rs2_software_video_frame{ 0 }; } ) )
         .def_property(
             "pixels",
             []( const rs2_software_video_frame & self ) {
@@ -100,6 +94,7 @@ void init_internal(py::module &m) {
         .def_readwrite("timestamp", &rs2_software_video_frame::timestamp)
         .def_readwrite("domain", &rs2_software_video_frame::domain)
         .def_readwrite("frame_number", &rs2_software_video_frame::frame_number)
+        .def_readwrite("depth_units", &rs2_software_video_frame::depth_units)
         .def_property(
             "profile",
             []( const rs2_software_video_frame & self ) {
@@ -127,7 +122,8 @@ void init_internal(py::module &m) {
 
     py::class_<rs2_software_motion_frame> software_motion_frame(m, "software_motion_frame", "All the parameters "
                                                                 "required to define a motion frame.");
-    software_motion_frame.def(py::init([]() { rs2_software_motion_frame f{}; f.deleter = nullptr; return f; })) // guarantee deleter is set to nullptr
+    software_motion_frame  //
+        .def( py::init( []() { return rs2_software_motion_frame{ 0 }; } ) )
         .def_property("data", [](const rs2_software_motion_frame& self) -> rs2_vector {
             auto data = reinterpret_cast<const float*>(self.data);
             return rs2_vector{ data[0], data[1], data[2] };
@@ -148,7 +144,8 @@ void init_internal(py::module &m) {
 
     py::class_<rs2_software_pose_frame> software_pose_frame(m, "software_pose_frame", "All the parameters "
                                                             "required to define a pose frame.");
-    software_pose_frame.def(py::init([]() { rs2_software_pose_frame f{}; f.deleter = nullptr; return f; })) // guarantee deleter is set to nullptr
+    software_pose_frame  //
+        .def( py::init( []() { return rs2_software_pose_frame{ 0 }; } ) )
         .def_property(
             "data",
             []( const rs2_software_pose_frame & self ) -> rs2_pose {
@@ -180,7 +177,7 @@ void init_internal(py::module &m) {
     
     /** rs_internal.hpp **/
     // rs2::software_sensor
-    py::class_<rs2::software_sensor, rs2::sensor> software_sensor(m, "software_sensor");
+    py::class_<rs2::software_sensor, rs2::sensor, py_holder<rs2::software_sensor>> software_sensor(m, "software_sensor");
     software_sensor
         .def( "add_video_stream",
               &rs2::software_sensor::add_video_stream,
@@ -204,7 +201,7 @@ void init_internal(py::module &m) {
         .def("on_notification", &rs2::software_sensor::on_notification, "notif"_a);
 
     // rs2::software_device
-    py::class_<rs2::software_device, rs2::device> software_device(m, "software_device");
+    py::class_<rs2::software_device, rs2::device, py_holder<rs2::software_device>> software_device(m, "software_device");
     software_device.def(py::init<>())
         .def("add_sensor", &rs2::software_device::add_sensor, "Add software sensor with given name "
             "to the software device.", "name"_a)
@@ -233,21 +230,23 @@ void init_internal(py::module &m) {
     firmware_log_parsed_message.def("get_message", &rs2::firmware_log_parsed_message::message, "Get message ")
         .def("get_file_name", &rs2::firmware_log_parsed_message::file_name, "Get file name ")
         .def("get_thread_name", &rs2::firmware_log_parsed_message::thread_name, "Get thread name ")
+        .def("get_module_name", &rs2::firmware_log_parsed_message::module_name, "Get module name ")
         .def("get_severity", &rs2::firmware_log_parsed_message::severity, "Get severity ")
         .def("get_line", &rs2::firmware_log_parsed_message::line, "Get line ")
         .def("get_timestamp", &rs2::firmware_log_parsed_message::timestamp, "Get timestamp ")
         .def("get_sequence_id", &rs2::firmware_log_parsed_message::sequence_id, "Get sequence id");
 
     // rs2::firmware_logger
-    py::class_<rs2::firmware_logger, rs2::device> firmware_logger(m, "firmware_logger");
+    py::class_<rs2::firmware_logger, rs2::device, py_holder<rs2::firmware_logger>> firmware_logger(m, "firmware_logger");
     firmware_logger.def(py::init<rs2::device>(), "device"_a)
         .def("create_message", &rs2::firmware_logger::create_message, "Create FW Log")
         .def("create_parsed_message", &rs2::firmware_logger::create_parsed_message, "Create FW Parsed Log")
+        .def("start_collecting", &rs2::firmware_logger::start_collecting, "Start collecting FW logs")
+        .def("stop_collecting", &rs2::firmware_logger::stop_collecting, "Stop collecting FW logs")
         .def("get_number_of_fw_logs", &rs2::firmware_logger::get_number_of_fw_logs, "Get Number of Fw Logs Polled From Device")
         .def("get_firmware_log", &rs2::firmware_logger::get_firmware_log, "Get FW Log", "msg"_a)
         .def("get_flash_log", &rs2::firmware_logger::get_flash_log, "Get Flash Log", "msg"_a)
-        .def("init_parser", &rs2::firmware_logger::init_parser, "Initialize Parser with content of xml file",
-            "xml_content"_a)
+        .def("init_parser", &rs2::firmware_logger::init_parser, "Initialize Parser with content of xml file", "xml_content"_a)
         .def("parse_log", &rs2::firmware_logger::parse_log, "Parse Fw Log ", "msg"_a, "parsed_msg"_a);
 
     // rs2::terminal_parser
