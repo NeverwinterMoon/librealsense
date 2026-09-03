@@ -3,7 +3,7 @@
 
 #include "neon-align.h"
 
-#if defined(__ARM_NEON) && defined(BUILD_WITH_NEON) && !defined(ANDROID)
+#if defined(__ARM_NEON) && defined(BUILD_WITH_NEON)
 
 #include <arm_neon.h>
 namespace librealsense

@@ -3,7 +3,6 @@
 
 #include "image-neon.h"
 
-#ifndef ANDROID
     #if defined(__ARM_NEON) && defined(BUILD_WITH_NEON)
     #include <arm_neon.h>
 
@@ -209,4 +208,3 @@
         }
     }
     #endif
-#endif

@@ -8,7 +8,6 @@
 
 namespace librealsense
 {
-#ifndef ANDROID
     #if defined(__ARM_NEON) && defined(BUILD_WITH_NEON)
     void unpack_yuy2_neon_y8(uint8_t * const d[], const uint8_t * s, int n);
     void unpack_yuy2_neon_y16(uint8_t * const d[], const uint8_t * s, int n);
@@ -17,7 +16,6 @@ namespace librealsense
     void unpack_yuy2_neon_bgr8(uint8_t * const d[], const uint8_t * s, int n);
     void unpack_yuy2_neon_bgra8(uint8_t * const d[], const uint8_t * s, int n);
     #endif
-#endif
 }
 
 #endif

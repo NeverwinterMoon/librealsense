@@ -8,7 +8,6 @@
 
 namespace librealsense
 {
-#ifndef ANDROID
 #if defined(__ARM_NEON) && defined(BUILD_WITH_NEON)
     class align_neon_helper
     {
@@ -82,6 +81,5 @@ namespace librealsense
     private:
         std::shared_ptr<align_neon_helper> _neon_helper;
     };
-#endif
 #endif
 } // namespace librealsense
