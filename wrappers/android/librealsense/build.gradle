@@ -18,12 +18,36 @@ def librealsenseUpstreamVersion = {
     "${component('MAJOR')}.${component('MINOR')}.${component('PATCH')}"
 }()
 
-// The only number to bump for an Android-side change on the same upstream.
+// The only number to bump for an Android-side change on the same upstream. It
+// holds the next build to release: 2.58.1-1 is published, so this is 2.
 // Maven reads a trailing -<number> as a build number, so 2.58.1-1 sorts after
 // 2.58.1 rather than before it, which a named qualifier would not.
-def androidBuildNumber = 1
+def androidBuildNumber = 2
 
-ext.librealsenseVersion = "${librealsenseUpstreamVersion}-${androidBuildNumber}"
+// Every build is a -SNAPSHOT unless -Prelease is passed, the way the
+// timbeter-cv-* repositories keep main on the next version's snapshot. A local
+// build then never carries a number GitHub Packages also serves, so an app
+// that pins a release always gets the published AAR. See fork/README.md.
+def releaseVersion = "${librealsenseUpstreamVersion}-${androidBuildNumber}"
+def isRelease = providers.gradleProperty('release').isPresent()
+
+ext.librealsenseVersion = isRelease ? releaseVersion : "${releaseVersion}-SNAPSHOT"
+
+// Checked as soon as the task graph is known, so a wrong combination stops
+// before the native build rather than after it.
+gradle.taskGraph.whenReady { graph ->
+    def runs = { type -> graph.allTasks.any { type.isInstance(it) } }
+    if (!isRelease && runs(PublishToMavenRepository)) {
+        throw new GradleException(
+            "${librealsenseVersion} is a snapshot and stays local. " +
+            "Pass -Prelease to publish ${releaseVersion}.")
+    }
+    if (isRelease && runs(PublishToMavenLocal)) {
+        throw new GradleException(
+            "${releaseVersion} is a release and comes from GitHub Packages only. " +
+            "Drop -Prelease to install ${releaseVersion}-SNAPSHOT locally.")
+    }
+}
 
 afterEvaluate {
     publishing {

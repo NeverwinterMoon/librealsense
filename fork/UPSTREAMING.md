@@ -44,7 +44,8 @@ if (file("publish.gradle").exists()) { apply from: "publish.gradle" }
 ```
 
 with `publish.gradle` holding the `maven-publish` plugin, the GitHub Packages
-repository, the publication, and `androidBuildNumber`.
+repository, the publication, `androidBuildNumber`, and the snapshot and
+release checks (README.md in this directory).
 
 Why a new tracked file rather than an untracked one: **new files never
 conflict**, because upstream has nothing at that path to disagree with. An

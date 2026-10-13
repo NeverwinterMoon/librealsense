@@ -15,8 +15,8 @@ publishing configuration. Branches intended for upstream are cut fresh from
 
 ## Versioning
 
-The artifact version is `<upstream>-<androidBuildNumber>`, currently
-**2.58.1-1**. The upstream part is parsed out of
+The artifact version is `<upstream>-<androidBuildNumber>`; the latest release
+is **2.58.1-1**. The upstream part is parsed out of
 `include/librealsense2/rs.h` at configure time rather than typed into
 `build.gradle`, so it cannot drift from the code after a merge - the same
 source `CMake/version_config.cmake` reads. `androidBuildNumber` is the only
@@ -28,6 +28,25 @@ Maven reads a trailing `-<number>` as a build number, so `2.58.1-1` sorts
 The fork previously used its own unrelated numbering, which is why older notes
 refer to versions like `2.4.0`. Those numbers say nothing about the upstream
 they were built from, which is exactly why the scheme changed.
+
+### Snapshots and releases
+
+`androidBuildNumber` holds the next build to release, and every build is a
+`-SNAPSHOT` unless `-Prelease` is passed - the same arrangement as the
+`timbeter-cv-*` repositories, whose main always carries the next version's
+snapshot. With the number at 2, from `wrappers/android`:
+
+- `./gradlew :librealsense:publishToMavenLocal` installs `2.58.1-2-SNAPSHOT`
+  into `~/.m2`. An app tries it by pinning that version.
+- `./gradlew :librealsense:publish -Prelease` publishes `2.58.1-2` to GitHub
+  Packages. Bump `androidBuildNumber` right after, so the tree moves on to the
+  next snapshot.
+
+The other two combinations fail before the native build starts: a snapshot
+never goes to GitHub Packages, and a release never lands in `~/.m2`. Before
+this, a local publish reused the published number, so `~/.m2` could hold a
+different AAR under the same version as the registry, and nothing told an app
+which of the two it had resolved.
 
 ## Upstream 2.58.1: two build flags that must stay set
 
